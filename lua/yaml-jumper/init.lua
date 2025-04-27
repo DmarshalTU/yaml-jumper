@@ -28,7 +28,8 @@ local config = {
     cache_ttl = 30, -- seconds
     depth_limit = 10, -- Max directory scan depth
     max_history_items = 20, -- Max number of items to keep in history
-    use_smart_parser = true -- Use the smart YAML parser when available
+    use_smart_parser = true, -- Use the smart YAML parser when available
+    debug_performance = false -- Enable performance logging
 }
 
 -- History storage for YAML jumps
@@ -37,6 +38,33 @@ local max_history_size = 100
 
 -- Helper functions
 local utils = {}
+
+-- Performance profiling utilities
+local profiler = {}
+
+-- Start timing an operation
+function profiler.start(name)
+    if not config.debug_performance then
+        return function() end
+    end
+    
+    local start_time = vim.loop.hrtime()
+    return function()
+        local end_time = vim.loop.hrtime()
+        local duration = (end_time - start_time) / 1000000 -- convert to ms
+        vim.notify(string.format("[yaml-jumper] %s took %.2f ms", name, duration), vim.log.levels.DEBUG)
+        return duration
+    end
+end
+
+-- Log message with timestamp
+function profiler.log(msg)
+    if not config.debug_performance then
+        return
+    end
+    
+    vim.notify("[yaml-jumper] " .. msg, vim.log.levels.DEBUG)
+end
 
 -- Check for optional dependencies
 local has_lua_yaml, yaml = pcall(require, "lyaml")
@@ -50,9 +78,55 @@ function smart_parser.parse_content(content)
         local ok, parsed = pcall(yaml.load, content)
         if ok and parsed then
             return parsed
+        else
+            -- Log parsing error but don't show to user to avoid disruption
+            vim.schedule(function()
+                vim.diagnostic.show(vim.diagnostic.severity.HINT, 0, {
+                    {
+                        lnum = 0,
+                        col = 0,
+                        message = "YAML parser: " .. (parsed or "unknown error")
+                    }
+                }, {})
+            end)
         end
     end
     return nil
+end
+
+-- Cache for parsed YAML documents to avoid repeated parsing
+local yaml_cache = {}
+local yaml_cache_time = {}
+
+-- Get cached or freshly parsed YAML data
+function smart_parser.get_parsed_yaml(content, file_path)
+    -- Check if we have a valid cached version
+    if config.cache_enabled and file_path and yaml_cache[file_path] and
+       (os.time() - (yaml_cache_time[file_path] or 0) < config.cache_ttl) then
+        return yaml_cache[file_path]
+    end
+    
+    -- Parse the content
+    local parsed = smart_parser.parse_content(content)
+    
+    -- Cache the result if parsing succeeded
+    if parsed and config.cache_enabled and file_path then
+        yaml_cache[file_path] = parsed
+        yaml_cache_time[file_path] = os.time()
+    end
+    
+    return parsed
+end
+
+-- Clear the YAML parser cache
+function smart_parser.clear_cache(file_path)
+    if file_path then
+        yaml_cache[file_path] = nil
+        yaml_cache_time[file_path] = nil
+    else
+        yaml_cache = {}
+        yaml_cache_time = {}
+    end
 end
 
 -- Extract paths from parsed YAML data recursively
@@ -173,9 +247,11 @@ function utils.clear_cache(file_path)
     if file_path then
         cache.paths[file_path] = nil
         cache.values[file_path] = nil
+        smart_parser.clear_cache(file_path)
     else
         cache.paths = {}
         cache.values = {}
+        smart_parser.clear_cache()
     end
 end
 
@@ -341,9 +417,13 @@ end
 
 -- Get all YAML paths from the current buffer or file
 function M.get_yaml_paths(lines, file_path)
+    local stop_timer = profiler.start("get_yaml_paths")
+    
     -- Use cached paths if available and cache is enabled
     if config.cache_enabled and file_path and cache.paths[file_path] and 
        (os.time() - (cache.paths_time or {})[file_path] or 0) < config.cache_ttl then
+        profiler.log("Using cached paths for " .. file_path)
+        stop_timer()
         return cache.paths[file_path]
     end
     
@@ -351,22 +431,28 @@ function M.get_yaml_paths(lines, file_path)
     
     -- Try to use smart parser if enabled
     if config.use_smart_parser and has_lua_yaml then
+        profiler.log("Using smart parser")
+        local smart_timer = profiler.start("smart_parse")
+        
         -- Join lines into a single string for parsing
         local content = table.concat(lines, "\n")
         
-        -- Parse the YAML content
-        local parsed_data = smart_parser.parse_content(content)
+        -- Get parsed YAML data (from cache if available)
+        local parsed_data = smart_parser.get_parsed_yaml(content, file_path)
+        
         if parsed_data then
             -- Extract paths from parsed data
+            local extraction_timer = profiler.start("extract_paths")
             local smart_paths = smart_parser.extract_paths(parsed_data)
+            extraction_timer()
             
             -- Map smart paths to line numbers as best we can
+            local mapping_timer = profiler.start("map_paths")
             for i, line in ipairs(lines) do
                 local info = smart_parser.get_line_info(line)
                 if info and info.key then
                     for _, path_info in ipairs(smart_paths) do
                         -- Check if this line contains the key for this path
-                        local key_pattern = "^" .. vim.pesc(info.key) .. ":"
                         local path_parts = vim.split(path_info.path, ".", { plain = true })
                         local last_part = path_parts[#path_parts]
                         
@@ -384,8 +470,10 @@ function M.get_yaml_paths(lines, file_path)
                     end
                 end
             end
+            mapping_timer()
             
             if #paths > 0 then
+                profiler.log("Smart parsing found " .. #paths .. " paths")
                 -- Cache and return smart parsed results
                 if config.cache_enabled and file_path then
                     cache.paths = cache.paths or {}
@@ -394,13 +482,20 @@ function M.get_yaml_paths(lines, file_path)
                     cache.paths_time[file_path] = os.time()
                 end
                 
+                smart_timer()
+                stop_timer()
                 return paths
             end
             -- If smart parsing yielded no results, fall back to traditional method
+            profiler.log("Smart parsing found no paths, falling back")
         end
+        smart_timer()
     end
     
-    -- Traditional parsing method (existing code)
+    -- Traditional parsing method with array support
+    profiler.log("Using traditional parser")
+    local trad_timer = profiler.start("traditional_parse")
+    
     local current_indent = 0
     local current_keys = {}
     local array_indices = {}
@@ -495,6 +590,9 @@ function M.get_yaml_paths(lines, file_path)
         ::continue::
     end
     
+    profiler.log("Traditional parsing found " .. #paths .. " paths")
+    trad_timer()
+    
     -- Cache the result if caching is enabled
     if config.cache_enabled and file_path then
         cache.paths = cache.paths or {}
@@ -503,6 +601,7 @@ function M.get_yaml_paths(lines, file_path)
         cache.paths_time[file_path] = os.time()
     end
 
+    stop_timer()
     return paths
 end
 
@@ -1522,6 +1621,14 @@ function M.setup(opts)
     -- Check for smart parser availability
     if config.use_smart_parser and not has_lua_yaml then
         vim.notify("lyaml library not found. Smart YAML parsing disabled. Run 'luarocks install lyaml' to enable.", vim.log.levels.WARN)
+    end
+    
+    -- Log configuration if debug is enabled
+    if config.debug_performance then
+        vim.notify("[yaml-jumper] Debug performance logging enabled", vim.log.levels.INFO)
+        profiler.log("Configuration: " .. vim.inspect(vim.tbl_filter(function(k, v) 
+            return type(v) ~= "table" 
+        end, config)))
     end
     
     -- Set up key mappings if they exist

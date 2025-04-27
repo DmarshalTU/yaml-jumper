@@ -13,6 +13,7 @@ A Neovim plugin for quickly navigating YAML files using Telescope.
 - **Smart error handling for large files**
 - **History tracking**: Quickly return to your recently used YAML paths and values
 - **Smart YAML Parsing**: Properly handles complex YAML structures including arrays and nested objects
+- **Performance profiling**: Optional debug mode for optimizing performance
 
 ## Requirements
 
@@ -95,6 +96,9 @@ require('yaml-jumper').setup({
     -- Parser settings
     use_smart_parser = true,           -- Use the enhanced YAML parser when available
     
+    -- Debug settings
+    debug_performance = false,         -- Enable performance profiling and logging
+    
     -- Highlight settings
     highlights = {
         enabled = true,
@@ -112,6 +116,18 @@ require('yaml-jumper').setup({
 - `:YamlJumpValueProject` - Search YAML values across project files
 - `:YamlJumpClearCache` - Clear the YAML path and value cache
 - `:YamlJumpHistory` - Browse through your recently used paths and values
+
+## Performance Profiling
+
+You can enable performance profiling to identify bottlenecks by setting `debug_performance = true` in your configuration. This will output timing information for various operations to help optimize the plugin for your specific environment.
+
+When enabled, you'll see detailed logs with:
+- Parsing times for both smart and traditional parsers
+- Cache hit/miss information
+- Path extraction and mapping times
+- Overall performance metrics
+
+This is particularly useful when working with large YAML files or when experiencing any slowdowns.
 
 ## Example
 
@@ -154,6 +170,8 @@ The plugin includes several optimizations for handling large YAML files and proj
 - **Automatic cache invalidation**: Cache is updated when you save files
 - **Efficient parsing**: Optimized parsing algorithms for minimal memory usage
 - **Smart YAML parsing**: With the lyaml library, complex YAML structures are parsed more accurately
+- **Multi-level caching**: Both parsed YAML documents and extracted paths are cached separately for maximum efficiency
+- **Performance profiling**: Optional debug mode helps identify and resolve bottlenecks
 
 ## License
 
