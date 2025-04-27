@@ -100,6 +100,8 @@ end
 
 -- Display status message at bottom of screen
 local function show_status(message)
+    -- Clear previous messages first
+    vim.cmd("echo ''")
     vim.api.nvim_echo({{message, "YamlInputPrompt"}}, false, {})
 end
 
@@ -195,9 +197,10 @@ function M.jump_to_path()
                 end
                 
                 vim.api.nvim_win_set_cursor(0, {key_matches[1].line, 0})
-                show_status("Found " .. #key_matches .. " matches for '" .. input .. "' (press Enter to confirm)")
+                -- Only update status, don't show a new message for each keystroke
+                show_status(string.format("YAML Jumper: '%s' (%d matches)", input, #key_matches))
             else
-                show_status("No matches found for '" .. input .. "'")
+                show_status(string.format("YAML Jumper: '%s' (no matches)", input))
             end
         else
             -- Parse and find matches for dot notation path
@@ -218,9 +221,10 @@ function M.jump_to_path()
             -- Jump to first match if there are any
             if #matches > 0 then
                 vim.api.nvim_win_set_cursor(0, {matches[1].line, 0})
-                show_status("Found " .. #matches .. " matches for '" .. input .. "' (press Enter to confirm)")
+                -- Only update status, don't show a new message for each keystroke
+                show_status(string.format("YAML Jumper: '%s' (%d matches)", input, #matches))
             else
-                show_status("No matches found for '" .. input .. "'")
+                show_status(string.format("YAML Jumper: '%s' (no matches)", input))
             end
         end
     end
@@ -243,7 +247,7 @@ function M.jump_to_path()
         elseif key.type == "backspace" then
             if #input > 0 then
                 input = input:sub(1, -2)
-                show_status("Current input: '" .. input .. "'")
+                -- Do not show extra status messages for backspace
             end
         elseif key.type == "char" then
             input = input .. key.value
@@ -259,9 +263,11 @@ function M.jump_to_path()
         vim.api.nvim_buf_delete(ui_elements.bufnr, {force = true})
     end
     
-    -- Show a message before clearing highlights
+    -- Show final message
     if #input > 0 then
-        show_status("Jumped to: " .. input)
+        show_status("YAML Jumper: Jumped to '" .. input .. "'")
+    else
+        show_status("")  -- Clear status
     end
     
     -- Leave the highlights on for a short time so the user can see them
