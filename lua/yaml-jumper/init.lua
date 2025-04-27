@@ -30,7 +30,12 @@ local function find_keys_with_prefix(prefix, lines)
             
             -- Check if key starts with prefix
             if prefix == "" or key:lower():find("^" .. prefix:lower()) then
-                table.insert(matches, {line = i, key = key})
+                table.insert(matches, {
+                    line = i,
+                    key = key,
+                    text = line:gsub("^%s+", ""),
+                    path = key
+                })
             end
         end
         
@@ -45,7 +50,6 @@ local function find_yaml_path(keys, lines)
     local current_indent = 0
     local current_keys = {}
     local matches = {}
-    local key_positions = {}
 
     for i, line in ipairs(lines) do
         -- Skip empty lines and comments
@@ -66,28 +70,27 @@ local function find_yaml_path(keys, lines)
         local key = line:match("^%s*([^:]+):")
         if key then
             key = key:gsub("^%s*(.-)%s*$", "%1")
-            -- Store key position for highlighting
-            local key_start = line:find(key, 1, true)
             
             table.insert(current_keys, key)
             current_indent = indent
 
-            -- Check if we've found our path (partial or complete)
+            -- Check if we've found our path
             local found = true
-            local highlight_keys = {}
-            
-            for j = 1, math.min(#current_keys, #keys) do
-                if current_keys[j] ~= keys[j] then
+            for j, k in ipairs(keys) do
+                if j > #current_keys or current_keys[j] ~= k then
                     found = false
                     break
                 end
-                table.insert(highlight_keys, {key = keys[j], line = i, col_start = key_start})
             end
             
-            if found then
-                if #current_keys >= #keys then
-                    table.insert(matches, {line = i, key_positions = highlight_keys})
-                end
+            if found and #current_keys >= #keys then
+                local path = table.concat(current_keys, ".", 1, #keys)
+                table.insert(matches, {
+                    line = i,
+                    key = current_keys[#keys],
+                    text = line:gsub("^%s+", ""),
+                    path = path
+                })
             end
         end
 
@@ -97,108 +100,170 @@ local function find_yaml_path(keys, lines)
     return matches
 end
 
--- Highlight matches for a given input
-local function highlight_matches(input, lines)
-    -- Clear previous highlights
-    vim.fn.clearmatches()
-    
-    -- If input is empty or doesn't contain dots, show keys with prefix
-    if input == "" or not input:find("%.") then
-        local key_matches = find_keys_with_prefix(input, lines)
+-- Get all YAML paths from the current buffer
+local function get_yaml_paths(lines)
+    local paths = {}
+    local current_indent = 0
+    local current_keys = {}
+
+    for i, line in ipairs(lines) do
+        -- Skip empty lines and comments
+        if line:match("^%s*$") or line:match("^%s*#") then
+            goto continue
+        end
+
+        -- Get the current line's indent level
+        local indent = line:match("^%s*"):len()
         
-        -- Highlight and jump to first match
-        if #key_matches > 0 then
-            for _, match in ipairs(key_matches) do
-                vim.fn.matchadd('YamlKeyHighlight', '\\%' .. match.line .. 'l\\s*' .. match.key)
-            end
+        -- If we're going back in indentation, remove keys from our path
+        while #current_keys > 0 and indent <= current_indent do
+            table.remove(current_keys)
+            current_indent = current_indent - 2 -- Assuming 2-space indentation
+        end
+
+        -- Extract the key from the current line
+        local key = line:match("^%s*([^:]+):")
+        if key then
+            key = key:gsub("^%s*(.-)%s*$", "%1")
             
-            vim.api.nvim_win_set_cursor(0, {key_matches[1].line, 0})
-            return #key_matches, true
-        else
-            return 0, false
-        end
-    else
-        -- Parse and find matches for dot notation path
-        local keys = parse_path(input)
-        local matches = find_yaml_path(keys, lines)
-        
-        -- Highlight all matches
-        for _, match in ipairs(matches) do
-            -- Highlight the line
-            vim.fn.matchadd('YamlPathHighlight', '\\%' .. match.line .. 'l.*')
+            table.insert(current_keys, key)
+            current_indent = indent
             
-            -- Highlight each key in the path
-            for _, key_pos in ipairs(match.key_positions) do
-                vim.fn.matchadd('YamlKeyHighlight', '\\%' .. key_pos.line .. 'l\\%' .. key_pos.col_start .. 'c' .. key_pos.key)
-            end
+            -- Add the current path to our list
+            local path = table.concat(current_keys, ".")
+            table.insert(paths, {
+                line = i,
+                key = key,
+                text = line:gsub("^%s+", ""),
+                path = path
+            })
         end
-        
-        -- Jump to first match if there are any
-        if #matches > 0 then
-            vim.api.nvim_win_set_cursor(0, {matches[1].line, 0})
-            return #matches, true
-        else
-            return 0, false
-        end
+
+        ::continue::
     end
+
+    return paths
 end
 
--- Main function to jump to a YAML path
+-- Jump to a YAML path using telescope
 function M.jump_to_path()
+    -- Check if telescope is available
+    local has_telescope, telescope = pcall(require, "telescope.builtin")
+    if not has_telescope then
+        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+        return
+    end
+    
     -- Get lines of current buffer
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     
-    -- Clear any existing highlights
-    vim.fn.clearmatches()
+    -- Get all paths
+    local paths = get_yaml_paths(lines)
     
-    -- Custom completion function that shows matches as you type
-    local function path_completion(arglead, cmdline, cursorpos)
-        local match_count, has_matches = highlight_matches(arglead, lines)
-        return {} -- Return empty list since we're not actually completing
-    end
-    
-    -- Use Neovim's built-in input function with custom completion
-    local input = vim.fn.input({
-        prompt = "YAML Path: ",
-        completion = path_completion,
-        cancelreturn = "",
-    })
-    
-    if input ~= "" then
-        -- Do final highlight and jump
-        local match_count, has_matches = highlight_matches(input, lines)
-        
-        -- Show completion message
-        if has_matches then
-            vim.api.nvim_echo({{string.format("Jumped to YAML path: %s (%d matches)", input, match_count), "Normal"}}, false, {})
-        else
-            vim.api.nvim_echo({{string.format("No matches found for: %s", input), "WarningMsg"}}, false, {})
+    -- Create finder options
+    local opts = {
+        prompt_title = "YAML Path",
+        finder = require("telescope.finders").new_table {
+            results = paths,
+            entry_maker = function(entry)
+                return {
+                    value = entry,
+                    display = entry.path,
+                    ordinal = entry.path,
+                    path = entry.path,
+                    lnum = entry.line,
+                    text = entry.text
+                }
+            end
+        },
+        sorter = require("telescope.config").values.generic_sorter({}),
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = require("telescope.actions.state").get_selected_entry()
+                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            end)
+            return true
         end
-        
-        -- Keep the highlights for a short time
-        vim.defer_fn(function()
-            vim.fn.clearmatches()
-        end, 3000)
-    else
-        -- Clear highlights if cancelled
-        vim.fn.clearmatches()
+    }
+    
+    -- Open telescope
+    require("telescope.pickers").new(opts):find()
+end
+
+-- Jump to a key prefix using telescope
+function M.jump_to_key()
+    -- Check if telescope is available
+    local has_telescope, telescope = pcall(require, "telescope.builtin")
+    if not has_telescope then
+        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+        return
     end
+    
+    -- Get lines of current buffer
+    local bufnr = vim.api.nvim_get_current_buf()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    
+    -- Get all keys
+    local matches = find_keys_with_prefix("", lines)
+    
+    -- Create finder options
+    local opts = {
+        prompt_title = "YAML Key",
+        finder = require("telescope.finders").new_table {
+            results = matches,
+            entry_maker = function(entry)
+                return {
+                    value = entry,
+                    display = entry.key,
+                    ordinal = entry.key,
+                    lnum = entry.line,
+                    text = entry.text
+                }
+            end
+        },
+        sorter = require("telescope.config").values.generic_sorter({}),
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = require("telescope.actions.state").get_selected_entry()
+                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            end)
+            return true
+        end
+    }
+    
+    -- Open telescope
+    require("telescope.pickers").new(opts):find()
 end
 
 -- Setup function
 function M.setup(opts)
     opts = opts or {}
     
-    -- Create highlight groups
+    -- Add command for dot notation paths
     vim.api.nvim_create_user_command(
         "YamlJump",
         function() M.jump_to_path() end,
         { nargs = 0 }
     )
     
-    -- Add key mapping (default: <leader>yj)
-    local keymap = opts.keymap or '<leader>yj'
-    vim.keymap.set('n', keymap, ':YamlJump<CR>', { silent = true, desc = 'Jump to YAML path' })
+    -- Add command for key search
+    vim.api.nvim_create_user_command(
+        "YamlJumpKey",
+        function() M.jump_to_key() end,
+        { nargs = 0 }
+    )
+    
+    -- Add key mappings
+    local path_keymap = opts.path_keymap or '<leader>yj'
+    local key_keymap = opts.key_keymap or '<leader>yk'
+    
+    vim.keymap.set('n', path_keymap, ':YamlJump<CR>', { silent = true, desc = 'Jump to YAML path' })
+    vim.keymap.set('n', key_keymap, ':YamlJumpKey<CR>', { silent = true, desc = 'Jump to YAML key' })
 end
 
 return M

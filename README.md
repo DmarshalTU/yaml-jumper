@@ -1,13 +1,17 @@
 # YAML Jumper
 
-A Neovim plugin for quickly navigating YAML files using dot-notation paths.
+A Neovim plugin for quickly navigating YAML files using Telescope.
 
 ## Features
 
-- Jump to YAML paths using dot notation (e.g., `metadata.name`)
-- Incremental search functionality (type the beginning of a key to jump to it)
-- Highlights both the target line and the specific keys in the path
-- Displays current search path in a mini floating window
+- Jump to YAML paths using fuzzy search (e.g., `metadata.name`)
+- Jump to YAML keys directly
+- Uses Telescope UI for smooth interaction and reliable input handling
+- Works with any YAML file structure
+
+## Requirements
+
+- [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
 
 ## Installation
 
@@ -16,6 +20,9 @@ A Neovim plugin for quickly navigating YAML files using dot-notation paths.
 ```lua
 {
   "DmarshalTU/yaml-jumper",
+  dependencies = {
+    "nvim-telescope/telescope.nvim",
+  },
   config = function()
     require("yaml-jumper").setup()
   end,
@@ -28,6 +35,7 @@ A Neovim plugin for quickly navigating YAML files using dot-notation paths.
 ```lua
 use {
   "DmarshalTU/yaml-jumper",
+  requires = { "nvim-telescope/telescope.nvim" },
   config = function()
     require("yaml-jumper").setup()
   end
@@ -36,18 +44,26 @@ use {
 
 ## Usage
 
-1. In a YAML file, press `<leader>yj` to activate YAML Jumper
-2. Type a key name to jump to it (e.g., `m` will jump to the first key starting with "m")
-3. Use dot notation to navigate nested structures (e.g., `metadata.name`)
-4. Press Enter to confirm or Escape to cancel
+The plugin provides two main commands:
+
+1. Jump to a YAML path (dot notation):
+   - Press `<leader>yj` to open the Telescope path finder
+   - Type any part of a path to find it (e.g., `metadata.name`)
+   - Press Enter to jump to the selected path
+
+2. Jump to a YAML key:
+   - Press `<leader>yk` to open the Telescope key finder
+   - Type any part of a key to find it (e.g., `image`)
+   - Press Enter to jump to the selected key
 
 ## Configuration
 
-You can customize the keybinding by passing options to the setup function:
+You can customize the keybindings by passing options to the setup function:
 
 ```lua
 require("yaml-jumper").setup({
-  keymap = "<leader>y", -- Change the default keybinding
+  path_keymap = "<leader>yj", -- Change the path jump keybinding
+  key_keymap = "<leader>yk"   -- Change the key jump keybinding
 })
 ```
 
@@ -69,11 +85,9 @@ spec:
       app: nginx
 ```
 
-You can type:
-- `m` to jump to `metadata`
-- `s` to jump to `spec`
-- `metadata.name` to jump to the `name` field under `metadata`
-- `spec.selector.matchLabels` to jump to the `matchLabels` field
+- Press `<leader>yj` and type "meta" to find the `metadata` path  
+- Press `<leader>yj` and type "spec.rep" to find the `spec.replicas` path
+- Press `<leader>yk` and type "name" to find the `name` key
 
 ## License
 
