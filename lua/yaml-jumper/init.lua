@@ -1,8 +1,9 @@
 local M = {}
 
--- Highlight groups
-vim.api.nvim_set_hl(0, 'YamlPathHighlight', { bg = '#2d2d2d', fg = '#ffffff' })
-vim.api.nvim_set_hl(0, 'YamlKeyHighlight', { fg = '#ffcc00', bold = true })
+-- Highlight groups with more prominent colors
+vim.api.nvim_set_hl(0, 'YamlPathHighlight', { bg = '#404040', fg = '#ffffff', bold = true })
+vim.api.nvim_set_hl(0, 'YamlKeyHighlight', { fg = '#ff9900', bg = '#333333', bold = true })
+vim.api.nvim_set_hl(0, 'YamlInputPrompt', { fg = '#ffffff', bg = '#0066cc', bold = true })
 
 -- Parse a dot-notation path into a table of keys
 local function parse_path(path)
@@ -97,10 +98,15 @@ local function find_yaml_path(keys, lines)
     return matches
 end
 
+-- Display status message at bottom of screen
+local function show_status(message)
+    vim.api.nvim_echo({{message, "YamlInputPrompt"}}, false, {})
+end
+
 -- Create a mini buffer for displaying the current search
 local function create_mini_buffer(input)
     local bufnr = vim.api.nvim_create_buf(false, true)
-    local width = #input + 10
+    local width = #input + 25  -- Make the window wider
     local height = 1
     
     local ui = vim.api.nvim_list_uis()[1]
@@ -111,14 +117,19 @@ local function create_mini_buffer(input)
         relative = 'editor',
         width = width,
         height = height,
-        row = win_height - 3,
+        row = win_height - 5,  -- Position higher on screen
         col = math.floor((win_width - width) / 2),
         style = 'minimal',
-        border = 'rounded'
+        border = 'rounded',
+        title = "YAML Jumper",
+        title_pos = "center",
     }
     
     local winid = vim.api.nvim_open_win(bufnr, false, win_opts)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {"Path: " .. input})
+    
+    -- Apply highlight to the floating window
+    vim.api.nvim_win_set_option(winid, 'winhighlight', 'Normal:YamlInputPrompt')
     
     return {bufnr = bufnr, winid = winid}
 end
@@ -132,6 +143,9 @@ function M.jump_to_path()
     local input = ""
     local matches = {}
     local ui_elements = nil
+    
+    -- Show initial message
+    show_status("YAML Jumper: Type to search (Esc to cancel, Enter to confirm)")
     
     -- Function to update search results
     local function update_search()
@@ -159,6 +173,9 @@ function M.jump_to_path()
                 end
                 
                 vim.api.nvim_win_set_cursor(0, {key_matches[1].line, 0})
+                show_status("Found " .. #key_matches .. " matches for '" .. input .. "' (press Enter to confirm)")
+            else
+                show_status("No matches found for '" .. input .. "'")
             end
         else
             -- Parse and find matches for dot notation path
@@ -179,6 +196,9 @@ function M.jump_to_path()
             -- Jump to first match if there are any
             if #matches > 0 then
                 vim.api.nvim_win_set_cursor(0, {matches[1].line, 0})
+                show_status("Found " .. #matches .. " matches for '" .. input .. "' (press Enter to confirm)")
+            else
+                show_status("No matches found for '" .. input .. "'")
             end
         end
     end
@@ -207,8 +227,16 @@ function M.jump_to_path()
         vim.api.nvim_buf_delete(ui_elements.bufnr, {force = true})
     end
     
-    -- Clear highlights when done
-    vim.fn.clearmatches()
+    -- Show a message before clearing highlights
+    if #input > 0 then
+        show_status("Jumped to: " .. input)
+    end
+    
+    -- Leave the highlights on for a short time so the user can see them
+    vim.defer_fn(function()
+        vim.fn.clearmatches()
+        vim.cmd("echo ''") -- Clear status line after a delay
+    end, 2000)
 end
 
 -- Setup function
