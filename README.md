@@ -4,21 +4,21 @@ A Neovim plugin for quickly navigating YAML files using Telescope.
 
 ## Features
 
-- Jump to YAML paths using fuzzy search (e.g., `metadata.name`)
-- Jump to YAML keys directly
-- Search for specific values in your YAML files
-- Search across all YAML files in your project
-- Edit YAML values directly from the search interface
-- Preview the content and context of each match
-- Performance optimized with intelligent caching
-- Smart error handling for large files
-- Uses Telescope UI for smooth interaction and reliable input handling
-- Works with any YAML file structure
+- **Navigate YAML paths with Telescope**: Quickly search and jump to any node in your YAML structure
+- **Search by value**: Find YAML paths by their values
+- **Path preview**: See what's at a selected path before jumping to it
+- **Multi-file search**: Search YAML paths and values across all project files
+- **Edit YAML values directly from the search interface**
+- **Performance optimized with intelligent caching**
+- **Smart error handling for large files**
+- **History tracking**: Quickly return to your recently used YAML paths and values
+- **Smart YAML Parsing**: Properly handles complex YAML structures including arrays and nested objects
 
 ## Requirements
 
 - [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
 - [Plenary.nvim](https://github.com/nvim-lua/plenary.nvim) (for multi-file search)
+- [lyaml](https://github.com/gvvaughan/lyaml) (optional, for improved YAML parsing)
 
 ## Installation
 
@@ -53,85 +53,65 @@ use {
 }
 ```
 
+### Optional Dependencies
+
+For enhanced YAML parsing with proper support for complex structures, you can install the lyaml library:
+
+```bash
+luarocks install lyaml
+```
+
 ## Usage
 
-The plugin provides five main commands:
-
-### Single File Operations
-
-1. Jump to a YAML path (dot notation):
-   - Press `<leader>yj` to open the Telescope path finder
-   - Type any part of a path to find it (e.g., `metadata.name`)
-   - Preview the content at that path in the preview window
-   - Press Enter to jump to the selected path
-
-2. Jump to a YAML key:
-   - Press `<leader>yk` to open the Telescope key finder
-   - Type any part of a key to find it (e.g., `image`)
-   - Preview the content at that key in the preview window
-   - Press Enter to jump to the selected key
-
-3. Search for YAML values:
-   - Press `<leader>yv` to open the Telescope value finder
-   - Type any part of a value to find it (e.g., `nginx`)
-   - See the full path and value in the results
-   - Preview shows the context around that value
-   - Press Enter to jump to the selected value
-   - Press `<C-e>` to edit the value in-place
-
-### Multi-File Operations
-
-4. Search YAML paths across all project files:
-   - Press `<leader>yJ` to open the project-wide path finder
-   - Type any part of a path to find it across all YAML files
-   - Results show file paths and YAML paths
-   - Preview shows the context in the target file
-   - Press Enter to open the file and jump to the selected path
-
-5. Search YAML values across all project files:
-   - Press `<leader>yV` to open the project-wide value finder
-   - Type any part of a value to find it across all YAML files
-   - Results show file paths, YAML paths, and values
-   - Preview shows the context in the target file
-   - Press Enter to open the file and jump to the selected value
-   - Press `<C-e>` to edit the value in-place
-
-### Cache Management
-
-6. Clear the YAML path cache:
-   - Run `:YamlJumpClearCache` to clear the cache manually
-   - Cache is automatically cleared when you save YAML files
+- **Navigate to YAML path**: Use `<leader>yp` to open a Telescope picker and search for YAML paths
+- **Search by value**: Use `<leader>yv` to search for YAML values
+- **Multi-file search**: 
+  - `<leader>yJ` - Search YAML paths across all project files
+  - `<leader>yV` - Search YAML values across all project files
+- **Edit values**: Press `<C-e>` on a search result to edit the value
+- **Browse history**: Press `<leader>yh` to view and jump to recently used paths and values
 
 ## Configuration
 
-You can customize the plugin by passing options to the setup function:
-
 ```lua
-require("yaml-jumper").setup({
-  -- Key mappings
-  path_keymap = "<leader>yj",        -- Change the path jump keybinding
-  key_keymap = "<leader>yk",         -- Change the key jump keybinding
-  value_keymap = "<leader>yv",       -- Change the value search keybinding
-  project_path_keymap = "<leader>yJ", -- Change the project path search keybinding
-  project_value_keymap = "<leader>yV", -- Change the project value search keybinding
-  
-  -- Highlights
-  highlights = {
-    enabled = true,
-    path = { bg = '#404040', fg = '#ffffff', bold = true },
-    key = { fg = '#ff9900', bg = '#333333', bold = true }
-  },
-  
-  -- Performance settings
-  max_file_size = 1024 * 1024,  -- 1MB max file size for scanning
-  max_preview_lines = 20,       -- Maximum lines to show in preview 
-  depth_limit = 10,             -- Max directory scan depth
-  
-  -- Caching settings
-  cache_enabled = true,         -- Enable result caching for performance
-  cache_ttl = 30,               -- Cache time-to-live in seconds
+require('yaml-jumper').setup({
+    -- Customizing keymaps
+    path_keymap = '<leader>yp',        -- Search paths in current file
+    value_keymap = '<leader>yv',       -- Search values in current file
+    project_path_keymap = '<leader>yJ', -- Search paths across project
+    project_value_keymap = '<leader>yV', -- Search values across project
+    history_keymap = '<leader>yh',     -- Browse search history
+    
+    -- Performance settings
+    max_file_size = 1024 * 1024,       -- Max file size to process (1MB)
+    max_preview_lines = 20,            -- Max lines to show in preview
+    depth_limit = 10,                  -- Max directory scan depth
+    
+    -- Cache settings
+    cache_enabled = true,              -- Enable caching for better performance
+    cache_ttl = 30,                    -- Cache time-to-live in seconds
+    max_history_items = 20,            -- Max number of items to keep in history
+    
+    -- Parser settings
+    use_smart_parser = true,           -- Use the enhanced YAML parser when available
+    
+    -- Highlight settings
+    highlights = {
+        enabled = true,
+        path = { bg = '#404040', fg = '#ffffff', bold = true },
+        key = { fg = '#ff9900', bg = '#333333', bold = true }
+    }
 })
 ```
+
+## Special Commands
+
+- `:YamlJumpPath` - Jump to YAML path in current file
+- `:YamlJumpValue` - Search YAML values in current file
+- `:YamlJumpProject` - Search YAML paths across project files
+- `:YamlJumpValueProject` - Search YAML values across project files
+- `:YamlJumpClearCache` - Clear the YAML path and value cache
+- `:YamlJumpHistory` - Browse through your recently used paths and values
 
 ## Example
 
@@ -149,14 +129,21 @@ spec:
   selector:
     matchLabels:
       app: nginx
+  template:
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
 ```
 
-- Press `<leader>yj` and type "meta" to find the `metadata` path
-- Press `<leader>yj` and type "spec.rep" to find the `spec.replicas` path
-- Press `<leader>yk` and type "name" to find the `name` key
+- Press `<leader>yp` and type "meta" to find the `metadata` path
+- Press `<leader>yp` and type "spec.rep" to find the `spec.replicas` path
 - Press `<leader>yv` and type "nginx" to find values containing "nginx"
 - Press `<leader>yJ` to search for paths across all YAML files in your project
 - Press `<leader>yV` to search for values across all YAML files in your project
+- The smart parser will correctly identify array items like `containers.1.name`
 
 ## Performance Notes
 
@@ -166,6 +153,7 @@ The plugin includes several optimizations for handling large YAML files and proj
 - **File size limiting**: Very large files (>1MB by default) are detected and warnings are shown
 - **Automatic cache invalidation**: Cache is updated when you save files
 - **Efficient parsing**: Optimized parsing algorithms for minimal memory usage
+- **Smart YAML parsing**: With the lyaml library, complex YAML structures are parsed more accurately
 
 ## License
 

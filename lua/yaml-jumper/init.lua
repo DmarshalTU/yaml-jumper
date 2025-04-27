@@ -8,7 +8,11 @@ local M = {}
 -- Module-level cache for performance
 local cache = {
     paths = {},
-    values = {}
+    values = {},
+    history = {
+        paths = {},
+        values = {}
+    }
 }
 
 -- Configuration with defaults
@@ -22,11 +26,147 @@ local config = {
     max_preview_lines = 20,
     cache_enabled = true,
     cache_ttl = 30, -- seconds
-    depth_limit = 10 -- Max directory scan depth
+    depth_limit = 10, -- Max directory scan depth
+    max_history_items = 20, -- Max number of items to keep in history
+    use_smart_parser = true -- Use the smart YAML parser when available
 }
+
+-- History storage for YAML jumps
+local history = {}
+local max_history_size = 100
 
 -- Helper functions
 local utils = {}
+
+-- Check for optional dependencies
+local has_lua_yaml, yaml = pcall(require, "lyaml")
+
+-- Smart YAML parser module
+local smart_parser = {}
+
+-- Parse YAML content using smart parser
+function smart_parser.parse_content(content)
+    if has_lua_yaml then
+        local ok, parsed = pcall(yaml.load, content)
+        if ok and parsed then
+            return parsed
+        end
+    end
+    return nil
+end
+
+-- Extract paths from parsed YAML data recursively
+function smart_parser.extract_paths(data, current_path, paths_result)
+    current_path = current_path or ""
+    paths_result = paths_result or {}
+    
+    if type(data) ~= "table" then
+        return paths_result
+    end
+    
+    -- Handle both array and dictionary types
+    local is_array = vim.tbl_islist(data)
+    
+    if is_array then
+        -- Handle array items
+        for i, value in ipairs(data) do
+            local item_path = current_path ~= "" and (current_path .. "." .. i) or tostring(i)
+            
+            if type(value) == "table" then
+                -- Add the array index path
+                table.insert(paths_result, {
+                    path = item_path,
+                    value = "Array Item " .. i,
+                    isArray = true,
+                    arrayIndex = i
+                })
+                -- Recursively add nested paths
+                smart_parser.extract_paths(value, item_path, paths_result)
+            else
+                -- Add leaf array item
+                table.insert(paths_result, {
+                    path = item_path,
+                    value = tostring(value),
+                    isArray = true,
+                    arrayIndex = i
+                })
+            end
+        end
+    else
+        -- Handle dictionary items
+        for key, value in pairs(data) do
+            local item_path = current_path ~= "" and (current_path .. "." .. key) or key
+            
+            if type(value) == "table" then
+                -- Add the key path
+                table.insert(paths_result, {
+                    path = item_path,
+                    value = "Object",
+                    isArray = false
+                })
+                -- Recursively add nested paths
+                smart_parser.extract_paths(value, item_path, paths_result)
+            else
+                -- Add leaf item
+                table.insert(paths_result, {
+                    path = item_path,
+                    value = tostring(value),
+                    isArray = false
+                })
+            end
+        end
+    end
+    
+    return paths_result
+end
+
+-- Extract hierarchy info from line
+function smart_parser.get_line_info(line)
+    -- Skip empty lines and comments
+    if line:match("^%s*$") or line:match("^%s*#") then
+        return nil
+    end
+    
+    local indent = line:match("^%s*"):len()
+    local key = line:match("^%s*([^:]+):")
+    local value = line:match(":%s*(.+)$")
+    
+    if key then
+        key = key:gsub("^%s*(.-)%s*$", "%1")
+        
+        -- Check if this is an array item
+        local is_array_item = key:match("^%-%s*(.*)$")
+        if is_array_item then
+            -- This is an array item
+            if is_array_item ~= "" then
+                -- This is a named item in an array
+                key = is_array_item:gsub("^%s*(.-)%s*$", "%1")
+                return {
+                    indent = indent,
+                    key = key,
+                    value = value,
+                    is_array_item = true
+                }
+            else
+                -- This is an unnamed array item
+                return {
+                    indent = indent,
+                    is_array_item = true,
+                    value = value,
+                }
+            end
+        else
+            -- This is a regular key
+            return {
+                indent = indent,
+                key = key,
+                value = value
+            }
+        end
+    end
+    
+    return nil
+end
 
 -- Clear cache for a file or all files
 function utils.clear_cache(file_path)
@@ -208,8 +348,62 @@ function M.get_yaml_paths(lines, file_path)
     end
     
     local paths = {}
+    
+    -- Try to use smart parser if enabled
+    if config.use_smart_parser and has_lua_yaml then
+        -- Join lines into a single string for parsing
+        local content = table.concat(lines, "\n")
+        
+        -- Parse the YAML content
+        local parsed_data = smart_parser.parse_content(content)
+        if parsed_data then
+            -- Extract paths from parsed data
+            local smart_paths = smart_parser.extract_paths(parsed_data)
+            
+            -- Map smart paths to line numbers as best we can
+            for i, line in ipairs(lines) do
+                local info = smart_parser.get_line_info(line)
+                if info and info.key then
+                    for _, path_info in ipairs(smart_paths) do
+                        -- Check if this line contains the key for this path
+                        local key_pattern = "^" .. vim.pesc(info.key) .. ":"
+                        local path_parts = vim.split(path_info.path, ".", { plain = true })
+                        local last_part = path_parts[#path_parts]
+                        
+                        if last_part == info.key then
+                            table.insert(paths, {
+                                line = i,
+                                key = info.key,
+                                text = line:gsub("^%s+", ""),
+                                path = path_info.path,
+                                value = path_info.value,
+                                isArray = path_info.isArray or false
+                            })
+                            break
+                        end
+                    end
+                end
+            end
+            
+            if #paths > 0 then
+                -- Cache and return smart parsed results
+                if config.cache_enabled and file_path then
+                    cache.paths = cache.paths or {}
+                    cache.paths_time = cache.paths_time or {}
+                    cache.paths[file_path] = paths
+                    cache.paths_time[file_path] = os.time()
+                end
+                
+                return paths
+            end
+            -- If smart parsing yielded no results, fall back to traditional method
+        end
+    end
+    
+    -- Traditional parsing method (existing code)
     local current_indent = 0
     local current_keys = {}
+    local array_indices = {}
 
     for i, line in ipairs(lines) do
         -- Skip empty lines and comments
@@ -230,22 +424,72 @@ function M.get_yaml_paths(lines, file_path)
             end
         end
 
-        -- Extract the key from the current line
-        local key = line:match("^%s*([^:]+):")
-        if key then
-            key = key:gsub("^%s*(.-)%s*$", "%1")
+        -- Check if this is an array item
+        local is_array_item = line:match("^%s*%-")
+        if is_array_item then
+            -- Get the current array path
+            local array_path = #current_keys > 0 and table.concat(current_keys, ".") or ""
             
-            table.insert(current_keys, key)
-            current_indent = indent
+            -- Initialize or increment array index
+            array_indices[array_path] = (array_indices[array_path] or 0) + 1
+            local index = array_indices[array_path]
             
-            -- Add the current path to our list
-            local path = table.concat(current_keys, ".")
-            table.insert(paths, {
-                line = i,
-                key = key,
-                text = line:gsub("^%s+", ""),
-                path = path
-            })
+            -- Extract array item key if it exists (e.g., "- name: value")
+            local item_key = line:match("^%s*%-%s*([^:]+):")
+            if item_key then
+                item_key = item_key:gsub("^%s*(.-)%s*$", "%1")
+                
+                local array_item_path
+                if array_path ~= "" then
+                    array_item_path = array_path .. "." .. index .. "." .. item_key
+                else
+                    array_item_path = index .. "." .. item_key
+                end
+                
+                table.insert(paths, {
+                    line = i,
+                    key = item_key,
+                    text = line:gsub("^%s+", ""),
+                    path = array_item_path,
+                    isArray = true,
+                    arrayIndex = index
+                })
+            else
+                -- Simple array item without a key
+                local array_item_path
+                if array_path ~= "" then
+                    array_item_path = array_path .. "." .. index
+                else
+                    array_item_path = tostring(index)
+                end
+                
+                table.insert(paths, {
+                    line = i,
+                    key = "[" .. index .. "]",
+                    text = line:gsub("^%s+", ""),
+                    path = array_item_path,
+                    isArray = true,
+                    arrayIndex = index
+                })
+            end
+        else
+            -- Extract the key from the current line (regular key, not array item)
+            local key = line:match("^%s*([^:]+):")
+            if key then
+                key = key:gsub("^%s*(.-)%s*$", "%1")
+                
+                table.insert(current_keys, key)
+                current_indent = indent
+                
+                -- Add the current path to our list
+                local path = table.concat(current_keys, ".")
+                table.insert(paths, {
+                    line = i,
+                    key = key,
+                    text = line:gsub("^%s+", ""),
+                    path = path
+                })
+            end
         end
 
         ::continue::
@@ -508,6 +752,69 @@ function M.add_edit_action(prompt_bufnr, map)
     return true
 end
 
+-- Add a path to history
+function utils.add_to_history(path, history_type)
+    if not path or path == "" then
+        return
+    end
+    
+    -- Initialize if needed
+    cache.history = cache.history or { paths = {}, values = {} }
+    
+    -- Get the right history list
+    local history = cache.history[history_type] or {}
+    
+    -- Remove if already exists (to avoid duplicates)
+    for i, item in ipairs(history) do
+        if item == path then
+            table.remove(history, i)
+            break
+        end
+    end
+    
+    -- Add to the beginning
+    table.insert(history, 1, path)
+    
+    -- Limit size
+    if #history > config.max_history_items then
+        history[#history] = nil
+    end
+    
+    -- Save back
+    cache.history[history_type] = history
+
+    -- Also add to global history for the dedicated history picker
+    add_to_global_history({
+        type = history_type,
+        value = path,
+        timestamp = os.time()
+    })
+end
+
+-- Add an entry to the unified global history
+function add_to_global_history(entry)
+    -- Prevent duplicate consecutive entries
+    if #history > 0 and 
+       history[#history].type == entry.type and 
+       history[#history].value == entry.value then
+        return
+    end
+    
+    -- Add to history
+    table.insert(history, entry)
+    
+    -- Trim history if it exceeds max size
+    if #history > max_history_size then
+        table.remove(history, 1)
+    end
+end
+
+-- Get path history
+function utils.get_history(history_type)
+    cache.history = cache.history or { paths = {}, values = {} }
+    return cache.history[history_type] or {}
+end
+
 -- Jump to a YAML path using telescope
 function M.jump_to_path()
     -- Check if telescope is available
@@ -523,6 +830,10 @@ function M.jump_to_path()
     
     -- Get all paths
     local paths = M.get_yaml_paths(lines)
+    
+    -- Add history items to the results
+    local history_items = utils.get_history("paths")
+    local has_history = #history_items > 0
     
     -- Preview function that shows the YAML value at the selected path
     local previewer = require("telescope.previewers").new_buffer_previewer({
@@ -568,17 +879,30 @@ function M.jump_to_path()
     
     -- Create finder options
     local opts = {
-        prompt_title = "YAML Path",
+        prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
         finder = require("telescope.finders").new_table {
             results = paths,
             entry_maker = function(entry)
+                local display = entry.path
+                local is_history = false
+                
+                -- Check if this path is in history
+                for _, h in ipairs(history_items) do
+                    if h == entry.path then
+                        is_history = true
+                        display = "⭐ " .. display
+                        break
+                    end
+                end
+                
                 return {
                     value = entry,
-                    display = entry.path,
-                    ordinal = entry.path,
+                    display = display,
+                    ordinal = (is_history and "0" or "1") .. entry.path, -- Sort history first
                     path = entry.path,
                     lnum = entry.line,
-                    text = entry.text
+                    text = entry.text,
+                    is_history = is_history
                 }
             end
         },
@@ -590,6 +914,9 @@ function M.jump_to_path()
                 actions.close(prompt_bufnr)
                 local selection = require("telescope.actions.state").get_selected_entry()
                 pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
+                
+                -- Add to history
+                utils.add_to_history(selection.path, "paths")
             end)
             
             -- Add edit action
@@ -709,6 +1036,10 @@ function M.jump_to_value()
     -- Get all values
     local values = M.get_yaml_values(lines)
     
+    -- Get history
+    local history_items = utils.get_history("values")
+    local has_history = #history_items > 0
+    
     -- Preview function for values
     local previewer = require("telescope.previewers").new_buffer_previewer({
         title = "YAML Context Preview",
@@ -740,18 +1071,31 @@ function M.jump_to_value()
     
     -- Create finder options
     local opts = {
-        prompt_title = "YAML Value Search",
+        prompt_title = has_history and "YAML Value Search (Recent First)" or "YAML Value Search",
         finder = require("telescope.finders").new_table {
             results = values,
             entry_maker = function(entry)
+                local path_value = entry.path .. ": " .. entry.value
+                local is_history = false
+                
+                -- Check if this value is in history
+                for _, h in ipairs(history_items) do
+                    if h == path_value then
+                        is_history = true
+                        path_value = "⭐ " .. path_value
+                        break
+                    end
+                end
+                
                 return {
                     value = entry,
-                    display = entry.path .. ": " .. entry.value,
-                    ordinal = entry.path .. " " .. entry.value,
+                    display = path_value,
+                    ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
                     lnum = entry.line,
                     text = entry.text,
                     path = entry.path,
-                    value_text = entry.value
+                    value_text = entry.value,
+                    is_history = is_history
                 }
             end
         },
@@ -763,6 +1107,9 @@ function M.jump_to_value()
                 actions.close(prompt_bufnr)
                 local selection = require("telescope.actions.state").get_selected_entry()
                 vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+                
+                -- Add to history
+                utils.add_to_history(selection.path .. ": " .. selection.value_text, "values")
             end)
             
             -- Add edit action
@@ -1031,92 +1378,201 @@ function M.search_values_in_project()
     require("telescope.pickers").new(opts):find()
 end
 
--- Setup function with configuration
-function M.setup(opts)
-    -- Merge user config with defaults
-    if opts then
-        for k, v in pairs(opts) do
-            if type(v) == "table" and type(config[k]) == "table" then
-                -- Merge nested tables
-                for k2, v2 in pairs(v) do
-                    config[k][k2] = v2
-                end
-            else
-                config[k] = v
+-- Jump to history of recent YAML paths
+function M.jump_to_history()
+    -- Check if telescope is available
+    local has_telescope, telescope = pcall(require, "telescope.builtin")
+    if not has_telescope then
+        vim.notify("Telescope is required for yaml-jumper history", vim.log.levels.ERROR)
+        return
+    end
+    
+    if #history == 0 then
+        vim.notify("No YAML jump history available", vim.log.levels.INFO)
+        return
+    end
+
+    local items = {}
+    for i = #history, 1, -1 do
+        local entry = history[i]
+        local display = ""
+        local time_str = os.date("%H:%M:%S", entry.timestamp)
+        
+        if entry.type == "paths" then
+            display = "[" .. time_str .. "] Path: " .. entry.value
+        elseif entry.type == "values" then
+            display = "[" .. time_str .. "] Value: " .. entry.value
+        end
+        
+        table.insert(items, {
+            display = display,
+            entry = entry,
+            index = i
+        })
+    end
+    
+    -- Create finder options
+    local opts = {
+        prompt_title = "YAML Jump History",
+        finder = require("telescope.finders").new_table {
+            results = items,
+            entry_maker = function(item)
+                return {
+                    value = item,
+                    display = item.display,
+                    ordinal = item.display
+                }
             end
+        },
+        sorter = require("telescope.config").values.generic_sorter({}),
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = require("telescope.actions.state").get_selected_entry()
+                
+                -- Jump to appropriate place based on type
+                if selection.value.entry.type == "paths" then
+                    M.jump_to_specific_path(selection.value.entry.value)
+                elseif selection.value.entry.type == "values" then
+                    M.jump_to_specific_value(selection.value.entry.value)
+                end
+            end)
+            
+            return true
+        end
+    }
+    
+    -- Open telescope
+    require("telescope.pickers").new(opts):find()
+end
+
+-- Helper function to jump to a specific path
+function M.jump_to_specific_path(path_string)
+    -- Get buffer lines
+    local lines = utils.get_file_lines()
+    
+    -- Find the path
+    local keys = utils.parse_path(path_string)
+    local matches = M.find_yaml_path(keys, lines)
+    
+    if #matches > 0 then
+        vim.api.nvim_win_set_cursor(0, {matches[1].line, 0})
+        vim.notify("Jumped to: " .. path_string, vim.log.levels.INFO)
+    else
+        vim.notify("Path not found: " .. path_string, vim.log.levels.WARN)
+    end
+end
+
+-- Helper function to jump to a specific value
+function M.jump_to_specific_value(value_string)
+    -- Extract path and value
+    local path, value = value_string:match("^(.+): (.+)$")
+    
+    if not path or not value then
+        vim.notify("Invalid value format: " .. value_string, vim.log.levels.ERROR)
+        return
+    end
+    
+    -- Get buffer lines
+    local lines = utils.get_file_lines()
+    
+    -- First try to find by path
+    local keys = utils.parse_path(path)
+    local path_matches = M.find_yaml_path(keys, lines)
+    
+    if #path_matches > 0 then
+        vim.api.nvim_win_set_cursor(0, {path_matches[1].line, 0})
+        vim.notify("Jumped to: " .. value_string, vim.log.levels.INFO)
+    else
+        -- If not found by path, search values
+        local values = M.get_yaml_values(lines)
+        local found = false
+        
+        for _, entry in ipairs(values) do
+            if entry.path == path and entry.value == value then
+                vim.api.nvim_win_set_cursor(0, {entry.line, 0})
+                vim.notify("Jumped to: " .. value_string, vim.log.levels.INFO)
+                found = true
+                break
+            end
+        end
+        
+        if not found then
+            vim.notify("Value not found: " .. value_string, vim.log.levels.WARN)
+        end
+    end
+end
+
+-- Setup function to configure yaml-jumper
+function M.setup(opts)
+    -- Merge user options with defaults
+    opts = opts or {}
+    
+    -- Apply configuration
+    for k, v in pairs(opts) do
+        config[k] = v
+    end
+
+    -- Set max history size if provided
+    if opts.max_history_size then
+        max_history_size = opts.max_history_size
+    end
+    
+    -- Check for smart parser availability
+    if config.use_smart_parser and not has_lua_yaml then
+        vim.notify("lyaml library not found. Smart YAML parsing disabled. Run 'luarocks install lyaml' to enable.", vim.log.levels.WARN)
+    end
+    
+    -- Set up key mappings if they exist
+    local mappings = {
+        {"path_keymap", "yp", function() M.jump_to_path() end},
+        {"key_keymap", "yk", function() M.jump_to_key() end},
+        {"value_keymap", "yv", function() M.jump_to_value() end},
+        {"project_path_keymap", "yJ", function() M.search_paths_in_project() end},
+        {"project_value_keymap", "yV", function() M.search_values_in_project() end},
+        {"history_keymap", "yh", function() M.jump_to_history() end}
+    }
+    
+    -- Register mappings
+    for _, mapping in ipairs(mappings) do
+        local key = mapping[1]
+        local default = mapping[2]
+        local fn = mapping[3]
+        
+        local keymap = nil
+        if opts[key] == nil then
+            keymap = "<leader>" .. default
+        elseif opts[key] == false then
+            keymap = nil
+        else
+            keymap = opts[key]
+        end
+        
+        if keymap then
+            vim.keymap.set("n", keymap, fn, {noremap = true, silent = true})
         end
     end
     
-    -- Set up highlight groups if enabled
-    if config.highlights.enabled then
-        vim.api.nvim_set_hl(0, 'YamlPathHighlight', config.highlights.path)
-        vim.api.nvim_set_hl(0, 'YamlKeyHighlight', config.highlights.key)
-    end
+    -- Register commands
+    vim.api.nvim_create_user_command("YamlJump", function() M.jump_to_path() end, {})
+    vim.api.nvim_create_user_command("YamlJumpKey", function() M.jump_to_key() end, {})
+    vim.api.nvim_create_user_command("YamlJumpValue", function() M.jump_to_value() end, {})
+    vim.api.nvim_create_user_command("YamlJumpProject", function() M.search_paths_in_project() end, {})
+    vim.api.nvim_create_user_command("YamlJumpValueProject", function() M.search_values_in_project() end, {})
+    vim.api.nvim_create_user_command("YamlJumpClearCache", function() utils.clear_cache() end, {})
+    vim.api.nvim_create_user_command("YamlJumpHistory", function() M.jump_to_history() end, {})
     
-    -- Add commands for single file operations
-    vim.api.nvim_create_user_command(
-        "YamlJump",
-        function() M.jump_to_path() end,
-        { nargs = 0 }
-    )
-    
-    vim.api.nvim_create_user_command(
-        "YamlJumpKey",
-        function() M.jump_to_key() end,
-        { nargs = 0 }
-    )
-    
-    vim.api.nvim_create_user_command(
-        "YamlJumpValue",
-        function() M.jump_to_value() end,
-        { nargs = 0 }
-    )
-    
-    -- Add commands for multi-file operations
-    vim.api.nvim_create_user_command(
-        "YamlJumpProject",
-        function() M.search_paths_in_project() end,
-        { nargs = 0 }
-    )
-    
-    vim.api.nvim_create_user_command(
-        "YamlJumpValueProject",
-        function() M.search_values_in_project() end,
-        { nargs = 0 }
-    )
-    
-    -- Add command to clear the cache
-    vim.api.nvim_create_user_command(
-        "YamlJumpClearCache",
-        function() utils.clear_cache() end,
-        { nargs = 0 }
-    )
-    
-    -- Add key mappings for single file operations
-    local path_keymap = config.path_keymap or '<leader>yj'
-    local key_keymap = config.key_keymap or '<leader>yk'
-    local value_keymap = config.value_keymap or '<leader>yv'
-    
-    -- Add key mappings for multi-file operations
-    local project_path_keymap = config.project_path_keymap or '<leader>yJ'
-    local project_value_keymap = config.project_value_keymap or '<leader>yV'
-    
-    -- Set up key mappings
-    vim.keymap.set('n', path_keymap, ':YamlJump<CR>', { silent = true, desc = 'Jump to YAML path' })
-    vim.keymap.set('n', key_keymap, ':YamlJumpKey<CR>', { silent = true, desc = 'Jump to YAML key' })
-    vim.keymap.set('n', value_keymap, ':YamlJumpValue<CR>', { silent = true, desc = 'Jump to YAML value' })
-    vim.keymap.set('n', project_path_keymap, ':YamlJumpProject<CR>', { silent = true, desc = 'Search YAML paths in project' })
-    vim.keymap.set('n', project_value_keymap, ':YamlJumpValueProject<CR>', { silent = true, desc = 'Search YAML values in project' })
-    
-    -- Set up autocommands to clear cache on file write
+    -- Set up autocommands for cache clearing
     vim.api.nvim_create_autocmd("BufWritePost", {
         pattern = {"*.yaml", "*.yml"},
-        callback = function(event)
-            utils.clear_cache(event.file)
-        end,
+        callback = function()
+            local file_path = vim.api.nvim_buf_get_name(0)
+            if file_path and file_path ~= "" then
+                utils.clear_cache(file_path)
+            end
+        end
     })
-    
-    return M
 end
 
 return M
