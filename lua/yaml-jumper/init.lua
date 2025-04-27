@@ -204,6 +204,135 @@ local function get_yaml_values(lines)
     return values
 end
 
+-- Edit a YAML value in-place
+local function edit_yaml_value(file_path, line_num, current_value)
+    -- If file_path is not provided, use the current buffer
+    if not file_path then
+        -- Get the current line
+        local line = vim.api.nvim_buf_get_lines(0, line_num - 1, line_num, false)[1]
+        
+        -- Extract the key-value pattern from the line
+        local before_value, value = line:match("^(.+:)%s*(.*)$")
+        
+        if before_value and value then
+            -- Prompt for a new value
+            local new_value = vim.fn.input({
+                prompt = "New value: ",
+                default = value,
+                cancelreturn = nil
+            })
+            
+            -- If user didn't cancel and the value changed
+            if new_value and new_value ~= value then
+                -- Construct the new line
+                local new_line = before_value .. " " .. new_value
+                
+                -- Replace the current line
+                vim.api.nvim_buf_set_lines(0, line_num - 1, line_num, false, {new_line})
+                vim.notify("Value updated successfully", vim.log.levels.INFO)
+                return true
+            end
+        else
+            vim.notify("Could not parse YAML value on this line", vim.log.levels.ERROR)
+        end
+    else
+        -- Open the file if it's not already open
+        local current_file = vim.fn.expand("%:p")
+        local switched_buffer = false
+        local bufnr
+        
+        if current_file ~= file_path then
+            -- Check if the file is already in a buffer
+            local bufs = vim.api.nvim_list_bufs()
+            for _, buf in ipairs(bufs) do
+                if vim.api.nvim_buf_get_name(buf) == file_path then
+                    bufnr = buf
+                    break
+                end
+            end
+            
+            -- If not in a buffer, open it but don't switch
+            if not bufnr then
+                bufnr = vim.fn.bufadd(file_path)
+                vim.fn.bufload(bufnr)
+            end
+        else
+            bufnr = vim.api.nvim_get_current_buf()
+        end
+        
+        -- Read the line to edit
+        local line = vim.api.nvim_buf_get_lines(bufnr, line_num - 1, line_num, false)[1]
+        
+        -- Extract the key-value pattern from the line
+        local before_value, value = line:match("^(.+:)%s*(.*)$")
+        
+        if before_value and value then
+            -- Prompt for a new value
+            local new_value = vim.fn.input({
+                prompt = "New value: ",
+                default = value,
+                cancelreturn = nil
+            })
+            
+            -- If user didn't cancel and the value changed
+            if new_value and new_value ~= value then
+                -- Construct the new line
+                local new_line = before_value .. " " .. new_value
+                
+                -- Replace the current line in the buffer
+                vim.api.nvim_buf_set_lines(bufnr, line_num - 1, line_num, false, {new_line})
+                
+                -- Write the changes if needed
+                if not vim.api.nvim_buf_get_option(bufnr, "modified") then
+                    vim.api.nvim_buf_call(bufnr, function()
+                        vim.cmd("write")
+                    end)
+                end
+                
+                vim.notify("Value updated successfully in " .. vim.fn.fnamemodify(file_path, ":t"), vim.log.levels.INFO)
+                return true
+            end
+        else
+            vim.notify("Could not parse YAML value on this line", vim.log.levels.ERROR)
+        end
+    end
+    
+    return false
+end
+
+-- Add edit action to the value search
+local function add_edit_action(prompt_bufnr, map)
+    local actions = require("telescope.actions")
+    local action_state = require("telescope.actions.state")
+    
+    -- Add 'e' mapping to edit the value
+    map("i", "<C-e>", function()
+        local selection = action_state.get_selected_entry()
+        if selection then
+            actions.close(prompt_bufnr)
+            
+            -- Edit the value
+            local file_path = selection.filename
+            local line_num = selection.lnum
+            local current_value = selection.value_text or ""
+            
+            -- Open the file if needed
+            if file_path and file_path ~= vim.fn.expand("%:p") then
+                vim.cmd("edit " .. vim.fn.fnameescape(file_path))
+            end
+            
+            -- Move cursor to the selected line
+            vim.api.nvim_win_set_cursor(0, {line_num, 0})
+            
+            -- Edit the value
+            edit_yaml_value(file_path, line_num, current_value)
+        end
+    end)
+    
+    -- Return true to keep the default mappings
+    return true
+end
+
 -- Jump to a YAML path using telescope
 function M.jump_to_path()
     -- Check if telescope is available
@@ -456,6 +585,289 @@ function M.jump_to_value()
                 local selection = require("telescope.actions.state").get_selected_entry()
                 vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
             end)
+            
+            -- Add edit action
+            add_edit_action(prompt_bufnr, map)
+            
+            return true
+        end
+    }
+    
+    -- Open telescope
+    require("telescope.pickers").new(opts):find()
+end
+
+-- Find YAML files in the project
+local function find_yaml_files()
+    -- Check if plenary is available for file searching
+    local has_plenary, plenary_scan = pcall(require, "plenary.scandir")
+    if not has_plenary then
+        vim.notify("Plenary.nvim is required for multi-file search", vim.log.levels.ERROR)
+        return {}
+    end
+    
+    -- Get the project root
+    local cwd = vim.fn.getcwd()
+    
+    -- Scan for YAML files
+    local files = plenary_scan.scan_dir(cwd, {
+        hidden = false,
+        depth = 10,
+        search_pattern = function(entry)
+            return entry:match("%.ya?ml$")
+        end
+    })
+    
+    return files
+end
+
+-- Search for YAML paths across multiple files
+function M.search_paths_in_project()
+    -- Check if telescope is available
+    local has_telescope, telescope = pcall(require, "telescope.builtin")
+    if not has_telescope then
+        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+        return
+    end
+    
+    -- Find YAML files in the project
+    local files = find_yaml_files()
+    if #files == 0 then
+        vim.notify("No YAML files found in the project", vim.log.levels.WARN)
+        return
+    end
+    
+    -- Build a list of all paths with their files
+    local all_paths = {}
+    
+    -- Process each file
+    for _, file_path in ipairs(files) do
+        local file_content = {}
+        
+        -- Read the file content
+        local file = io.open(file_path, "r")
+        if file then
+            for line in file:lines() do
+                table.insert(file_content, line)
+            end
+            file:close()
+            
+            -- Extract paths from the file
+            local paths = get_yaml_paths(file_content)
+            
+            -- Add file information to each path
+            for _, path in ipairs(paths) do
+                path.file_path = file_path
+                path.file_name = vim.fn.fnamemodify(file_path, ":t")
+                path.relative_path = vim.fn.fnamemodify(file_path, ":~:.")
+                table.insert(all_paths, path)
+            end
+        end
+    end
+    
+    -- Preview function for multi-file paths
+    local previewer = require("telescope.previewers").new_buffer_previewer({
+        title = "YAML Preview",
+        define_preview = function(self, entry, status)
+            -- Read the file for preview
+            local content = {}
+            local file = io.open(entry.filename, "r")
+            if file then
+                local line_num = 1
+                local target_line = entry.lnum
+                local content_lines = {}
+                
+                -- Read all lines
+                for line in file:lines() do
+                    content_lines[line_num] = line
+                    line_num = line_num + 1
+                end
+                file:close()
+                
+                -- Add some context before and after the target line
+                local start_line = math.max(1, target_line - 5)
+                local end_line = math.min(#content_lines, target_line + 10)
+                
+                -- Add context to preview
+                for i = start_line, end_line do
+                    if i == target_line then
+                        -- Highlight the current line
+                        table.insert(content, "> " .. content_lines[i])
+                    else
+                        table.insert(content, "  " .. content_lines[i])
+                    end
+                end
+            else
+                table.insert(content, "Error: Could not read file")
+            end
+            
+            -- Add the content to the preview buffer
+            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
+            
+            -- Apply syntax highlighting
+            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
+        end
+    })
+    
+    -- Create finder options
+    local opts = {
+        prompt_title = "YAML Paths in Project",
+        finder = require("telescope.finders").new_table {
+            results = all_paths,
+            entry_maker = function(entry)
+                return {
+                    value = entry,
+                    display = entry.relative_path .. ":" .. entry.path,
+                    ordinal = entry.file_name .. " " .. entry.path,
+                    filename = entry.file_path,
+                    lnum = entry.line,
+                    text = entry.text
+                }
+            end
+        },
+        sorter = require("telescope.config").values.generic_sorter({}),
+        previewer = previewer,
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = require("telescope.actions.state").get_selected_entry()
+                -- Open the file if it's not the current buffer
+                if vim.fn.expand("%:p") ~= selection.filename then
+                    vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
+                end
+                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            end)
+            return true
+        end
+    }
+    
+    -- Open telescope
+    require("telescope.pickers").new(opts):find()
+end
+
+-- Search for YAML values across multiple files
+function M.search_values_in_project()
+    -- Check if telescope is available
+    local has_telescope, telescope = pcall(require, "telescope.builtin")
+    if not has_telescope then
+        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+        return
+    end
+    
+    -- Find YAML files in the project
+    local files = find_yaml_files()
+    if #files == 0 then
+        vim.notify("No YAML files found in the project", vim.log.levels.WARN)
+        return
+    end
+    
+    -- Build a list of all values with their files
+    local all_values = {}
+    
+    -- Process each file
+    for _, file_path in ipairs(files) do
+        local file_content = {}
+        
+        -- Read the file content
+        local file = io.open(file_path, "r")
+        if file then
+            for line in file:lines() do
+                table.insert(file_content, line)
+            end
+            file:close()
+            
+            -- Extract values from the file
+            local values = get_yaml_values(file_content)
+            
+            -- Add file information to each value
+            for _, value in ipairs(values) do
+                value.file_path = file_path
+                value.file_name = vim.fn.fnamemodify(file_path, ":t")
+                value.relative_path = vim.fn.fnamemodify(file_path, ":~:.")
+                table.insert(all_values, value)
+            end
+        end
+    end
+    
+    -- Preview function for multi-file values
+    local previewer = require("telescope.previewers").new_buffer_previewer({
+        title = "YAML Value Preview",
+        define_preview = function(self, entry, status)
+            -- Read the file for preview
+            local content = {}
+            local file = io.open(entry.filename, "r")
+            if file then
+                local line_num = 1
+                local target_line = entry.lnum
+                local content_lines = {}
+                
+                -- Read all lines
+                for line in file:lines() do
+                    content_lines[line_num] = line
+                    line_num = line_num + 1
+                end
+                file:close()
+                
+                -- Add some context before and after the target line
+                local start_line = math.max(1, target_line - 5)
+                local end_line = math.min(#content_lines, target_line + 10)
+                
+                -- Add context to preview
+                for i = start_line, end_line do
+                    if i == target_line then
+                        -- Highlight the current line
+                        table.insert(content, "> " .. content_lines[i])
+                    else
+                        table.insert(content, "  " .. content_lines[i])
+                    end
+                end
+            else
+                table.insert(content, "Error: Could not read file")
+            end
+            
+            -- Add the content to the preview buffer
+            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
+            
+            -- Apply syntax highlighting
+            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
+        end
+    })
+    
+    -- Create finder options
+    local opts = {
+        prompt_title = "YAML Values in Project",
+        finder = require("telescope.finders").new_table {
+            results = all_values,
+            entry_maker = function(entry)
+                return {
+                    value = entry,
+                    display = entry.relative_path .. ": " .. entry.path .. " = " .. entry.value,
+                    ordinal = entry.file_name .. " " .. entry.path .. " " .. entry.value,
+                    filename = entry.file_path,
+                    lnum = entry.line,
+                    text = entry.text,
+                    value_text = entry.value
+                }
+            end
+        },
+        sorter = require("telescope.config").values.generic_sorter({}),
+        previewer = previewer,
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            actions.select_default:replace(function()
+                actions.close(prompt_bufnr)
+                local selection = require("telescope.actions.state").get_selected_entry()
+                -- Open the file if it's not the current buffer
+                if vim.fn.expand("%:p") ~= selection.filename then
+                    vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
+                end
+                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            end)
+            
+            -- Add edit action
+            add_edit_action(prompt_bufnr, map)
+            
             return true
         end
     }
@@ -468,35 +880,53 @@ end
 function M.setup(opts)
     opts = opts or {}
     
-    -- Add command for dot notation paths
+    -- Add commands for single file operations
     vim.api.nvim_create_user_command(
         "YamlJump",
         function() M.jump_to_path() end,
         { nargs = 0 }
     )
     
-    -- Add command for key search
     vim.api.nvim_create_user_command(
         "YamlJumpKey",
         function() M.jump_to_key() end,
         { nargs = 0 }
     )
     
-    -- Add command for value search
     vim.api.nvim_create_user_command(
         "YamlJumpValue",
         function() M.jump_to_value() end,
         { nargs = 0 }
     )
     
-    -- Add key mappings
+    -- Add commands for multi-file operations
+    vim.api.nvim_create_user_command(
+        "YamlJumpProject",
+        function() M.search_paths_in_project() end,
+        { nargs = 0 }
+    )
+    
+    vim.api.nvim_create_user_command(
+        "YamlJumpValueProject",
+        function() M.search_values_in_project() end,
+        { nargs = 0 }
+    )
+    
+    -- Add key mappings for single file operations
     local path_keymap = opts.path_keymap or '<leader>yj'
     local key_keymap = opts.key_keymap or '<leader>yk'
     local value_keymap = opts.value_keymap or '<leader>yv'
     
+    -- Add key mappings for multi-file operations
+    local project_path_keymap = opts.project_path_keymap or '<leader>yJ'
+    local project_value_keymap = opts.project_value_keymap or '<leader>yV'
+    
+    -- Set up key mappings
     vim.keymap.set('n', path_keymap, ':YamlJump<CR>', { silent = true, desc = 'Jump to YAML path' })
     vim.keymap.set('n', key_keymap, ':YamlJumpKey<CR>', { silent = true, desc = 'Jump to YAML key' })
     vim.keymap.set('n', value_keymap, ':YamlJumpValue<CR>', { silent = true, desc = 'Jump to YAML value' })
+    vim.keymap.set('n', project_path_keymap, ':YamlJumpProject<CR>', { silent = true, desc = 'Search YAML paths in project' })
+    vim.keymap.set('n', project_value_keymap, ':YamlJumpValueProject<CR>', { silent = true, desc = 'Search YAML values in project' })
 end
 
 return M
