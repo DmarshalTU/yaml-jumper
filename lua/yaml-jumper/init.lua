@@ -134,6 +134,28 @@ local function create_mini_buffer(input)
     return {bufnr = bufnr, winid = winid}
 end
 
+-- Get a single key from the user
+local function get_key()
+    local key = vim.fn.getchar()
+    
+    -- Return character code for special keys or character for printable keys
+    if type(key) == "number" then
+        if key >= 32 and key <= 126 then  -- Printable ASCII
+            return {type = "char", value = vim.fn.nr2char(key)}
+        elseif key == 13 then -- Enter
+            return {type = "enter"}
+        elseif key == 27 then -- Escape
+            return {type = "escape"}
+        elseif key == 8 or key == 127 then -- Backspace/Delete
+            return {type = "backspace"}
+        else
+            return {type = "special", code = key}
+        end
+    else
+        return {type = "string", value = key}
+    end
+end
+
 -- Main function to jump to a YAML path
 function M.jump_to_path()
     -- Clear any existing highlights
@@ -203,21 +225,31 @@ function M.jump_to_path()
         end
     end
     
+    -- Create the initial buffer
+    ui_elements = create_mini_buffer(input)
+    update_search()
+    
     -- Start the input loop
     while true do
-        local char = vim.fn.getchar()
-        if char == 13 then -- Enter
+        -- Get keyboard input
+        local key = get_key()
+        
+        -- Process the key
+        if key.type == "enter" then
             break
-        elseif char == 27 then -- Escape
+        elseif key.type == "escape" then
             input = ""
             break
-        elseif char == 8 or char == 127 then -- Backspace
-            input = input:sub(1, -2)
-        else
-            input = input .. vim.fn.nr2char(char)
+        elseif key.type == "backspace" then
+            if #input > 0 then
+                input = input:sub(1, -2)
+                show_status("Current input: '" .. input .. "'")
+            end
+        elseif key.type == "char" then
+            input = input .. key.value
         end
         
-        -- Update search results
+        -- Update UI and search results
         update_search()
     end
     
