@@ -218,9 +218,9 @@ function M.create_snacks_picker(opts)
                 end
             end
             
-            -- Only return the value if it exists and isn't empty
+            -- Return the value with its path for context
             if value and value ~= "" then
-                return { value }
+                return { item.path .. " = " .. value }
             end
             return {}
         end
