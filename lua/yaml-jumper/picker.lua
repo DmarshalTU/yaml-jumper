@@ -47,20 +47,6 @@ end
 function M.create_snacks_picker(opts)
     local Snacks = require("snacks")
     
-    -- Setup logging
-    local log_file = vim.fn.expand("~/.local/share/nvim/yaml-jumper.log")
-    local function log(msg)
-        local file = io.open(log_file, "a")
-        if file then
-            file:write(os.date("%Y-%m-%d %H:%M:%S") .. " - " .. msg .. "\n")
-            file:close()
-        end
-    end
-    
-    -- Clear previous log
-    local file = io.open(log_file, "w")
-    if file then file:close() end
-    
     -- Helper function to extract value from YAML text
     local function extract_value(text)
         if not text then return nil end
@@ -83,13 +69,10 @@ function M.create_snacks_picker(opts)
         -- Extract value from text
         local value = extract_value(item.text)
         
-        -- Create the display string
-        local display = item.path
-        if value then
-            display = display .. ": " .. value
-        end
+        -- Create the display string with proper formatting
+        local display = string.format("%-40s %s", item.path, value or "")
         
-        -- Create the entry
+        -- Create the entry with all required fields
         local snack_entry = {
             value = item,
             display = display,
@@ -100,7 +83,29 @@ function M.create_snacks_picker(opts)
             text = item.text,
             path = item.path,
             key = item.key,
-            value_text = value
+            value_text = value,
+            -- Add Snacks-specific fields
+            label = display,
+            description = value or "",
+            preview = function()
+                local preview_bufnr = vim.api.nvim_create_buf(false, true)
+                local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(current_file), 0, -1, false)
+                local start_line = math.max(0, item.line - 5)
+                local end_line = math.min(#lines, item.line + 5)
+                
+                local preview_lines = {}
+                for i = start_line, end_line do
+                    if i == item.line - 1 then
+                        table.insert(preview_lines, "> " .. lines[i])
+                    else
+                        table.insert(preview_lines, "  " .. lines[i])
+                    end
+                end
+                
+                vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, preview_lines)
+                vim.api.nvim_buf_set_option(preview_bufnr, "filetype", "yaml")
+                return preview_bufnr
+            end
         }
         
         table.insert(entries, snack_entry)
@@ -118,33 +123,7 @@ function M.create_snacks_picker(opts)
             end
         end,
         preview = function(entry)
-            if not entry.filename then return end
-            
-            -- Create a preview buffer
-            local preview_bufnr = vim.api.nvim_create_buf(false, true)
-            
-            -- Get the content around the target line
-            local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(entry.filename), 0, -1, false)
-            local start_line = math.max(0, entry.lnum - 5)
-            local end_line = math.min(#lines, entry.lnum + 5)
-            
-            local preview_lines = {}
-            for i = start_line, end_line do
-                if i == entry.lnum - 1 then
-                    -- Highlight the current line
-                    table.insert(preview_lines, "> " .. lines[i])
-                else
-                    table.insert(preview_lines, "  " .. lines[i])
-                end
-            end
-            
-            -- Set the preview content
-            vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, preview_lines)
-            
-            -- Set filetype for syntax highlighting
-            vim.api.nvim_buf_set_option(preview_bufnr, "filetype", "yaml")
-            
-            return preview_bufnr
+            return entry.preview()
         end,
         attach_mappings = function(map)
             if opts.on_attach then
