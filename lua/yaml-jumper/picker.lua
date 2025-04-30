@@ -58,52 +58,48 @@ end
 
 -- Create a snacks picker
 function M.create_snacks_picker(opts)
+    -- Debug log the options
+    log(string.format("Creating snacks picker with options: %s", vim.inspect(opts)))
+
     local entries = {}
     local current_buf = vim.api.nvim_get_current_buf()
     local current_file = vim.api.nvim_buf_get_name(current_buf)
 
     -- Create entries for snacks
     for _, item in ipairs(opts.results) do
-        -- Debug log the item
+        -- Debug log the item being processed
         log(string.format("Processing item: %s", vim.inspect(item)))
-        
+
         -- Extract value from text if not provided
         local value = item.value
-        if not value then
-            -- Try to extract value from the line
+        if not value and item.text then
             local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
             if val then
                 value = val:gsub("^%s*(.-)%s*$", "%1")
             end
         end
 
-        -- Create a clean entry with only the relevant information
+        -- Create entry with all necessary fields
         local entry = {
             value = item,
             text = item.text,
-            lnum = item.line or item.lnum, -- Handle both line and lnum
-            col = 1,
+            lnum = item.line or item.lnum,
+            col = 0,
             buf = current_buf,
             file = current_file,
             filename = current_file,
             path = item.path,
             value_text = value,
             label = item.path,
-            description = value,
-            preview = {
-                text = item.text,
-                ft = "yaml",
-                loc = true
-            }
+            description = value
         }
-        
-        -- Debug log the entry
+
+        -- Debug log the created entry
         log(string.format("Created entry: %s", vim.inspect(entry)))
-        
         table.insert(entries, entry)
     end
 
-    -- Create the picker with proper configuration
+    -- Create picker configuration
     local picker = require("snacks").picker({
         items = entries,
         prompt = "YAML Jump: ",
@@ -111,92 +107,72 @@ function M.create_snacks_picker(opts)
             width = 0.8,
             height = 0.8,
             cycle = true,
-            preset = function()
-                return vim.o.columns >= 120 and "default" or "vertical"
-            end,
+            preset = "default"
         },
         jump = {
             jumplist = true,
             close = true,
             match = false,
-            reuse_win = true,
+            reuse_win = true
         },
         matcher = {
             fuzzy = true,
             smartcase = true,
-            ignorecase = true,
-            sort_empty = false,
-            -- Add exact matching for paths
-            match_fn = function(item, query)
-                if not query or query == "" then return true end
-                -- First try exact match
-                if item.path == query then return true end
-                -- Then try fuzzy match
-                return item.path:lower():find(query:lower(), 1, true) ~= nil
-            end
+            ignorecase = true
         },
         sort = {
-            fields = { "score:desc", "#text", "idx" },
+            fields = { "score:desc", "#text", "idx" }
         },
         win = {
             input = {
                 keys = {
                     ["<CR>"] = { "confirm", mode = { "n", "i" } },
                     ["<Esc>"] = "cancel",
-                    ["<C-e>"] = { "edit", mode = { "n", "i" } },
-                },
-            },
+                    ["<C-e>"] = { "edit", mode = { "n", "i" } }
+                }
+            }
         },
         on_select = function(selection)
-            if not selection or not selection.value then 
+            if not selection or not selection.value then
                 log("No selection or value in on_select")
-                return 
-            end
-            local item = selection.value
-            
-            -- Debug log the selection
-            log(string.format("Selected item: %s", vim.inspect(item)))
-            
-            -- Open the file if needed
-            if vim.fn.expand("%:p") ~= item.filename then
-                vim.cmd("edit " .. item.filename)
+                return
             end
 
-            -- Get the line number, trying both line and lnum fields
+            local item = selection.value
+            log(string.format("Selected item: %s", vim.inspect(item)))
+
+            -- Get line number
             local line_number = item.line or item.lnum
             if not line_number then
                 log("No line number found in item")
                 return
             end
 
-            -- Debug log the line number
-            log(string.format("Jumping to line %d", line_number))
-            
-            -- Jump to the beginning of the line
+            -- Position cursor at start of line
             vim.api.nvim_win_set_cursor(0, {line_number, 0})
-            
-            -- Add to history if on_select callback exists
+            log(string.format("Set cursor to line %d", line_number))
+
+            -- Call on_select callback if provided
             if opts.on_select then
                 opts.on_select(selection)
             end
         end,
         format = function(item)
-            -- Create a more visible display format
             local display = {}
             
-            -- Add the path in a visible color
+            -- Add path with highlighting
             table.insert(display, { item.path, "Keyword" })
             
-            -- Extract value from text if not already available
+            -- Get value
             local value = item.value_text
-            if not value then
+            if not value and item.text then
                 local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
                 if val then
                     value = val:gsub("^%s*(.-)%s*$", "%1")
                 end
             end
             
-            -- Add the value if it exists
+            -- Add value if it exists
             if value and value ~= "" then
                 table.insert(display, { " = ", "Normal" })
                 table.insert(display, { value, "String" })
@@ -204,93 +180,42 @@ function M.create_snacks_picker(opts)
             
             return display
         end,
-        preview = function(entry)
-            if not entry or not entry.value then return end
-            local item = entry.value
-            local filename = item.filename
-            if not filename then return end
-
-            -- Get the current line and some context
-            local start_line = math.max(1, item.lnum - 5)
-            local end_line = item.lnum + 5
-            local lines = vim.fn.readfile(filename, "", end_line)
-            local context = {}
-            
-            -- Add context lines
-            for i = start_line, math.min(end_line, #lines) do
-                if i == item.lnum then
-                    -- Highlight the current line
-                    table.insert(context, "> " .. lines[i])
-                else
-                    table.insert(context, "  " .. lines[i])
-                end
-            end
-
-            return {
-                filetype = "yaml",
-                contents = context,
-                syntax = "yaml",
-                highlight_line = item.lnum - start_line + 1,
-            }
-        end,
         values = function(entry)
-            if not entry or not entry.value then 
+            if not entry or not entry.value then
                 log("No entry or value in values function")
-                return {} 
+                return {}
             end
+
             local item = entry.value
-            
-            -- Debug log the entry
             log(string.format("Processing values for entry: %s", vim.inspect(item)))
-            
-            -- Extract value from text if not already available
+
+            -- Get value
             local value = item.value_text
-            if not value then
+            if not value and item.text then
                 local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
                 if val then
                     value = val:gsub("^%s*(.-)%s*$", "%1")
                 end
             end
-            
-            -- Debug log the extracted value
-            log(string.format("Extracted value: %s", value))
-            
-            -- Return the value with its path for context
-            if value and value ~= "" then
-                local path_parts = vim.split(item.path, ".", { plain = true })
-                local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
-                
-                local formatted_value = {}
-                if parent_path ~= "" then
-                    table.insert(formatted_value, parent_path .. ":")
-                end
-                table.insert(formatted_value, "  " .. path_parts[#path_parts] .. ": " .. value)
-                
-                log(string.format("Returning value: %s", vim.inspect(formatted_value)))
-                return formatted_value
+
+            if not value or value == "" then
+                log("No value found")
+                return {}
             end
-            
-            -- If no value found, try to get the value from the text directly
-            local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
-            if val then
-                val = val:gsub("^%s*(.-)%s*$", "%1")
-                if val ~= "" then
-                    local path_parts = vim.split(item.path, ".", { plain = true })
-                    local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
-                    
-                    local formatted_value = {}
-                    if parent_path ~= "" then
-                        table.insert(formatted_value, parent_path .. ":")
-                    end
-                    table.insert(formatted_value, "  " .. path_parts[#path_parts] .. ": " .. val)
-                    
-                    log(string.format("Returning direct value: %s", vim.inspect(formatted_value)))
-                    return formatted_value
-                end
+
+            -- Format value with path context
+            local path_parts = vim.split(item.path, ".", { plain = true })
+            local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
+            local last_part = path_parts[#path_parts]
+
+            local formatted_value = {}
+            if parent_path ~= "" then
+                table.insert(formatted_value, parent_path .. ":")
             end
-            
-            log("No value found, returning empty table")
-            return {}
+            table.insert(formatted_value, "  " .. last_part .. ": " .. value)
+
+            log(string.format("Returning formatted value: %s", vim.inspect(formatted_value)))
+            return formatted_value
         end
     })
 
