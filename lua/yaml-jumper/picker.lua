@@ -55,6 +55,7 @@ function M.create_snacks_picker(opts)
     for _, item in ipairs(opts.results) do
         local entry = opts.entry_maker(item)
         local filename = entry.filename or current_file
+        local bufnr = vim.fn.bufnr(filename)
         
         -- Create a unique key for this entry
         local entry_key = string.format("%s:%s:%d", filename, entry.path or entry.key or "", entry.lnum or entry.line or 0)
@@ -82,6 +83,8 @@ function M.create_snacks_picker(opts)
             display = display,
             ordinal = ordinal,
             filename = filename,
+            file = filename,  -- Required by Snacks for jumping
+            buf = bufnr,     -- Required by Snacks for jumping
             lnum = entry.lnum or entry.line or 1,
             text = entry.text or display,
             path = entry.path,
