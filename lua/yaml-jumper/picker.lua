@@ -16,17 +16,14 @@ end
 -- Create a picker based on the configured type
 function M.create_picker(opts, config)
     if config.picker_type == "telescope" then
-        return M.create_telescope_picker(opts)
-    elseif config.picker_type == "snacks" then
-        return M.create_snacks_picker(opts)
+        return M.create_telescope_picker(opts, config)
     else
-        vim.notify("Invalid picker type: " .. config.picker_type, vim.log.levels.ERROR)
-        return nil
+        return M.create_snacks_picker(opts, config)
     end
 end
 
 -- Create a telescope picker
-function M.create_telescope_picker(opts)
+function M.create_telescope_picker(opts, config)
     local telescope = require("telescope.pickers")
     local finders = require("telescope.finders")
     local previewers = require("telescope.previewers")
@@ -60,227 +57,161 @@ function M.create_telescope_picker(opts)
 end
 
 -- Create a snacks picker
-function M.create_snacks_picker(opts)
-    local entries = {}
-    local current_buf = vim.api.nvim_get_current_buf()
-    local current_file = vim.api.nvim_buf_get_name(current_buf)
-
+function M.create_snacks_picker(opts, config)
+    -- Debug log the input options
+    log("Creating snacks picker with options: " .. vim.inspect(opts))
+    
     -- Create entries for snacks
+    local entries = {}
     for _, item in ipairs(opts.results) do
-        -- Debug log the item
-        log(string.format("Processing item: %s", vim.inspect(item)))
+        -- Debug log the item being processed
+        log("Processing item: " .. vim.inspect(item))
         
         -- Extract value from text if not provided
-        local value = item.value
-        if not value then
-            -- Try to extract value from the line
+        local value = item.value_text
+        if not value and item.text then
             local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
             if val then
                 value = val:gsub("^%s*(.-)%s*$", "%1")
             end
         end
-
-        -- Create a clean entry with only the relevant information
+        
+        -- Debug log the extracted value
+        log("Extracted value: " .. tostring(value))
+        
+        -- Create entry
         local entry = {
             value = item,
             text = item.text,
-            lnum = item.line or item.lnum, -- Handle both line and lnum
-            col = 1,
-            buf = current_buf,
-            file = current_file,
-            filename = current_file,
+            lnum = item.lnum,
+            col = item.col or 0,
+            buf = item.buf,
+            file = item.file_path,
+            filename = item.file_path or vim.api.nvim_buf_get_name(0),
             path = item.path,
             value_text = value,
             label = item.path,
-            description = value,
-            preview = {
-                text = item.text,
-                ft = "yaml",
-                loc = true
-            }
+            description = value and (" = " .. value) or "",
+            preview = function(self)
+                if not self.filename then return end
+                
+                -- Get the current line and some context
+                local start_line = math.max(1, self.lnum - 5)
+                local end_line = self.lnum + 5
+                local lines = vim.fn.readfile(self.filename, "", end_line)
+                local context = {}
+                
+                -- Add context lines
+                for i = start_line, math.min(end_line, #lines) do
+                    if i == self.lnum then
+                        -- Highlight the current line
+                        table.insert(context, "> " .. lines[i])
+                    else
+                        table.insert(context, "  " .. lines[i])
+                    end
+                end
+                
+                return {
+                    filetype = "yaml",
+                    contents = context,
+                    syntax = "yaml",
+                    highlight_line = self.lnum - start_line + 1,
+                }
+            end
         }
         
-        -- Debug log the entry
-        log(string.format("Created entry: %s", vim.inspect(entry)))
+        -- Debug log the created entry
+        log("Created entry: " .. vim.inspect(entry))
         
         table.insert(entries, entry)
     end
-
-    -- Create the picker with proper configuration
-    local picker = require("snacks").picker({
-        items = entries,
-        prompt = "YAML Jump: ",
-        layout = {
-            width = 0.8,
-            height = 0.8,
-            cycle = true,
-            preset = function()
-                return vim.o.columns >= 120 and "default" or "vertical"
-            end,
-        },
-        jump = {
-            jumplist = true,
-            close = true,
-            match = false,
-            reuse_win = true,
-        },
-        matcher = {
-            fuzzy = true,
-            smartcase = true,
-            ignorecase = true,
-            sort_empty = false,
-            -- Add exact matching for paths
-            match_fn = function(item, query)
-                if not query or query == "" then return true end
-                -- First try exact match
-                if item.path == query then return true end
-                -- Then try fuzzy match
-                return item.path:lower():find(query:lower(), 1, true) ~= nil
-            end
-        },
-        sort = {
-            fields = { "score:desc", "#text", "idx" },
-        },
-        win = {
-            input = {
-                keys = {
-                    ["<CR>"] = { "confirm", mode = { "n", "i" } },
-                    ["<Esc>"] = "cancel",
-                    ["<C-e>"] = { "edit", mode = { "n", "i" } },
-                },
-            },
-        },
-        on_select = function(selection)
-            if not selection or not selection.value then 
-                log("No selection or value in on_select")
-                return 
-            end
-            local item = selection.value
-            
-            -- Debug log the selection
-            log(string.format("Selected item: %s", vim.inspect(item)))
-            
-            -- Open the file if needed
-            if vim.fn.expand("%:p") ~= item.filename then
-                vim.cmd("edit " .. item.filename)
-            end
-
-            -- Get the line number, trying both line and lnum fields
-            local line_number = item.line or item.lnum
-            if not line_number then
-                log("No line number found in item")
-                return
-            end
-
-            -- Debug log the line number
-            log(string.format("Jumping to line %d", line_number))
-            
-            -- Jump to the beginning of the line
-            vim.api.nvim_win_set_cursor(0, {line_number, 0})
-            
-            -- Add to history if on_select callback exists
-            if opts.on_select then
-                opts.on_select(selection)
-            end
+    
+    -- Debug log total entries
+    log("Total entries created: " .. #entries)
+    
+    -- Create the picker
+    local picker = require("snacks").create({
+        title = opts.prompt_title or "YAML Jumper",
+        entries = entries,
+        matcher = function(query, entry)
+            -- Support both fuzzy and exact matching for paths
+            local path = entry.path:lower()
+            local q = query:lower()
+            return path:find(q, 1, true) or path:match(q)
         end,
-        format = function(item)
-            -- Create a more visible display format
+        sorter = function(a, b)
+            -- Sort by path length and then alphabetically
+            if #a.path ~= #b.path then
+                return #a.path < #b.path
+            end
+            return a.path < b.path
+        end,
+        format = function(entry)
+            -- Format the display with proper highlighting
             local display = {}
             
-            -- Add the path in a visible color
-            table.insert(display, { item.path, "Keyword" })
-            
-            -- Extract value from text if not already available
-            local value = item.value_text
-            if not value then
-                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
-                if val then
-                    value = val:gsub("^%s*(.-)%s*$", "%1")
-                end
-            end
+            -- Add the path with keyword highlighting
+            table.insert(display, { entry.label, "Keyword" })
             
             -- Add the value if it exists
-            if value and value ~= "" then
+            if entry.description and entry.description ~= "" then
                 table.insert(display, { " = ", "Normal" })
-                table.insert(display, { value, "String" })
+                table.insert(display, { entry.description:sub(4), "String" })
             end
             
             return display
         end,
         preview = function(entry)
             if not entry or not entry.value then return end
-            local item = entry.value
-            local filename = item.filename
-            if not filename then return end
-
-            -- Get the current line and some context
-            local start_line = math.max(1, item.lnum - 5)
-            local end_line = item.lnum + 5
-            local lines = vim.fn.readfile(filename, "", end_line)
-            local context = {}
-            
-            -- Add context lines
-            for i = start_line, math.min(end_line, #lines) do
-                if i == item.lnum then
-                    -- Highlight the current line
-                    table.insert(context, "> " .. lines[i])
-                else
-                    table.insert(context, "  " .. lines[i])
-                end
-            end
-
-            return {
-                filetype = "yaml",
-                contents = context,
-                syntax = "yaml",
-                highlight_line = item.lnum - start_line + 1,
-            }
+            return entry:preview()
         end,
         values = function(entry)
             if not entry or not entry.value then 
                 log("No entry or value in values function")
                 return {} 
             end
-            local item = entry.value
             
             -- Debug log the entry
-            log(string.format("Processing values for entry: %s", vim.inspect(item)))
+            log(string.format("Processing values for entry: %s", vim.inspect(entry)))
             
-            -- Extract value from text if not already available
-            local value = item.value_text
-            if not value then
-                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
-                if val then
-                    value = val:gsub("^%s*(.-)%s*$", "%1")
-                end
-            end
-            
-            -- Debug log the extracted value
-            log(string.format("Extracted value: %s", value))
-            
-            -- Return the value with its path for context
-            if value and value ~= "" then
-                local result = { item.path .. " = " .. value }
+            -- Get the value with its path for context
+            if entry.description and entry.description ~= "" then
+                local result = { entry.label .. entry.description }
                 log(string.format("Returning value: %s", vim.inspect(result)))
                 return result
             end
             
-            -- If no value found, try to get the value from the text directly
-            local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
-            if val then
-                val = val:gsub("^%s*(.-)%s*$", "%1")
-                if val ~= "" then
-                    local result = { item.path .. " = " .. val }
-                    log(string.format("Returning direct value: %s", vim.inspect(result)))
-                    return result
-                end
-            end
-            
             log("No value found, returning empty table")
             return {}
+        end,
+        on_select = function(entry)
+            if not entry or not entry.value then return end
+            
+            -- Debug log the selected entry
+            log("Selected entry: " .. vim.inspect(entry))
+            
+            -- Get the filename and line number
+            local filename = entry.filename
+            local lnum = entry.lnum
+            
+            -- Open the file if it's not the current buffer
+            if filename and filename ~= vim.api.nvim_buf_get_name(0) then
+                vim.cmd("edit " .. vim.fn.fnameescape(filename))
+            end
+            
+            -- Set cursor to the beginning of the line
+            if lnum then
+                vim.api.nvim_win_set_cursor(0, {lnum, 0})
+                vim.cmd("normal! zz") -- Center the cursor line
+            end
+            
+            -- Call the original on_select if it exists
+            if opts.on_select then
+                opts.on_select(entry.value)
+            end
         end
     })
-
+    
     return picker
 end
 
