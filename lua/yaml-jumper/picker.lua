@@ -201,7 +201,15 @@ function M.create_snacks_picker(opts)
         values = function(entry)
             if not entry or not entry.value then return {} end
             local item = entry.value
-            local value = item.value_text or ""
+            
+            -- Extract value from text if not already available
+            local value = item.value_text
+            if not value then
+                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+                if val then
+                    value = val:gsub("^%s*(.-)%s*$", "%1")
+                end
+            end
             
             -- Only return the value if it exists and isn't empty
             if value and value ~= "" then
