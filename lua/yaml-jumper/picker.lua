@@ -69,26 +69,28 @@ function M.create_snacks_picker(opts)
         -- Extract value from text
         local value = extract_value(item.text)
         
-        -- Create the display string with proper formatting
-        local display = string.format("%-40s %s", item.path, value or "")
-        
         -- Create the entry with all required fields
         local snack_entry = {
+            -- Core fields
             value = item,
-            display = display,
             ordinal = item.path,
             filename = current_file,
             file = current_file,
-            lnum = item.line or 1, -- Ensure we have a line number
+            lnum = item.line or 1,
             text = item.text,
             path = item.path,
             key = item.key,
             value_text = value,
-            -- Add Snacks-specific fields
-            label = display,
+            
+            -- Snacks display fields
+            label = item.path,
             description = value or "",
-            -- Add the actual value for display
-            value = value
+            value = value,
+            
+            -- Custom display
+            display = function()
+                return string.format("%-40s %s", item.path, value or "")
+            end
         }
         
         table.insert(entries, snack_entry)
@@ -154,11 +156,7 @@ function M.create_snacks_picker(opts)
         },
         layout = {
             preview = "main"
-        },
-        -- Add custom display format
-        display = function(entry)
-            return entry.display
-        end
+        }
     })
     
     return picker
