@@ -68,7 +68,7 @@ function M.create_snacks_picker(opts)
             table.insert(entries, {
                 value = item,
                 display = function()
-                    return string.format("%-40s %s", item.path, value)
+                    return string.format("%-40s = %s", item.path, value)
                 end,
                 text = item.text,
                 lnum = item.line or 1,
@@ -80,6 +80,10 @@ function M.create_snacks_picker(opts)
                 value_text = value,
                 label = item.path,
                 description = value,
+                jump = {
+                    line = item.line or 1,
+                    col = 1
+                }
             })
         end
     end
@@ -125,9 +129,14 @@ function M.create_snacks_picker(opts)
             local filename = item.filename
             if not filename then return end
 
-            -- Open the file and jump to the line
-            vim.cmd("edit " .. filename)
+            -- Open the file if needed
+            if vim.fn.expand("%:p") ~= filename then
+                vim.cmd("edit " .. filename)
+            end
+
+            -- Jump to the line
             vim.api.nvim_win_set_cursor(0, {item.line, 0})
+            vim.cmd("normal! zz") -- Center the line
         end,
     })
 
