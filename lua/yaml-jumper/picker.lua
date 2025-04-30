@@ -50,10 +50,17 @@ function M.create_snacks_picker(opts)
     local current_file = vim.api.nvim_buf_get_name(0)
     local current_buf = vim.api.nvim_get_current_buf()
 
+    -- Helper function to extract value from YAML text
+    local function extract_value(text)
+        if not text then return "" end
+        local _, value = text:match("^[^:]+:%s*(.+)$")
+        return value or ""
+    end
+
     for _, item in ipairs(opts.results) do
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
-            local value = item.value or item.value_text or ""
+            local value = item.value or extract_value(item.text)
             local display = string.format("%-40s %s", item.path, value)
             table.insert(entries, {
                 value = item,
@@ -102,7 +109,8 @@ function M.create_snacks_picker(opts)
         },
         on_select = function(selection)
             if selection and selection.value and selection.value.line then
-                vim.api.nvim_win_set_cursor(0, {selection.value.line, 0})
+                local line = selection.value.line
+                vim.api.nvim_win_set_cursor(0, {line, 0})
             end
         end,
         keys = {
