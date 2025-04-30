@@ -67,16 +67,20 @@ function M.create_snacks_picker(opts)
 
     -- Create entries for snacks
     for _, item in ipairs(opts.results) do
-        local value = item.value or item.text:match(":%s*(.+)$")
-        if value then
-            value = value:gsub("^%s*(.-)%s*$", "%1")
+        -- Extract value from text if not provided
+        local value = item.value
+        if not value then
+            local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+            if val then
+                value = val:gsub("^%s*(.-)%s*$", "%1")
+            end
         end
 
         local entry = {
             value = item,
             display = function()
                 if value and value ~= "" then
-                    return string.format("%-40s = %s", item.path, value)
+                    return string.format("%s = %s", item.path, value)
                 else
                     return item.path
                 end
@@ -100,18 +104,23 @@ function M.create_snacks_picker(opts)
         table.insert(entries, entry)
     end
 
-    -- Create the picker
+    -- Create the picker with improved configuration
     local picker = require("snacks").picker({
         items = entries,
         prompt = "YAML Jump: ",
         layout = {
             width = 0.8,
             height = 0.8,
+            cycle = true,
+            preset = function()
+                return vim.o.columns >= 120 and "default" or "vertical"
+            end,
         },
         jump = {
             jumplist = true,
             close = true,
             match = false,
+            reuse_win = true,
         },
         preview = function(entry)
             if not entry or not entry.value then return end
@@ -153,6 +162,24 @@ function M.create_snacks_picker(opts)
                 opts.on_select(selection)
             end
         end,
+        matcher = {
+            fuzzy = true,
+            smartcase = true,
+            ignorecase = true,
+            sort_empty = false,
+        },
+        sort = {
+            fields = { "score:desc", "#text", "idx" },
+        },
+        win = {
+            input = {
+                keys = {
+                    ["<CR>"] = { "confirm", mode = { "n", "i" } },
+                    ["<Esc>"] = "cancel",
+                    ["<C-e>"] = { "edit", mode = { "n", "i" } },
+                },
+            },
+        },
     })
 
     return picker
