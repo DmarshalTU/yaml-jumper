@@ -70,9 +70,9 @@ function M.create_snacks_picker(opts)
         -- Debug log the item being processed
         log(string.format("Processing item: %s", vim.inspect(item)))
 
-        -- Extract value from text if not provided
-        local value = item.value
-        if not value and item.text then
+        -- Extract value from text
+        local value = nil
+        if item.text then
             local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
             if val then
                 value = val:gsub("^%s*(.-)%s*$", "%1")
@@ -163,9 +163,9 @@ function M.create_snacks_picker(opts)
             -- Add path with highlighting
             table.insert(display, { item.path, "Keyword" })
             
-            -- Get value
-            local value = item.value_text
-            if not value and item.text then
+            -- Get value from text
+            local value = nil
+            if item.text then
                 local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
                 if val then
                     value = val:gsub("^%s*(.-)%s*$", "%1")
@@ -189,22 +189,16 @@ function M.create_snacks_picker(opts)
             local item = entry.value
             log(string.format("Processing values for entry: %s", vim.inspect(item)))
 
-            -- Get value from the item's text
+            -- Get value from text
             local value = nil
             if item.text then
-                local line = item.text:gsub("^%s+", "") -- Remove leading whitespace
-                local _, val = line:match("^[^:]+:%s*(.+)$")
+                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
                 if val then
-                    value = val:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
+                    value = val:gsub("^%s*(.-)%s*$", "%1")
                 end
             end
 
-            -- If no value found in text, try item.value_text
-            if not value or value == "" then
-                value = item.value_text
-            end
-
-            -- If still no value, return empty table
+            -- If no value found, return empty table
             if not value or value == "" then
                 log("No value found")
                 return {}
