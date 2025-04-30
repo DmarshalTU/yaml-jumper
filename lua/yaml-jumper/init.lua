@@ -1069,6 +1069,12 @@ function M.jump_to_path()
         end
     }
 
+    -- Snacks expects these for preview/jump!
+    if config.picker_type == "snacks" then
+        picker_opts.format = "file"
+        picker_opts.preview = "preview"
+    end
+
     require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
