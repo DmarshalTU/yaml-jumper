@@ -4,8 +4,11 @@ local M = {}
 function M.create_picker(opts, config)
     if config.picker_type == "telescope" then
         return M.create_telescope_picker(opts)
-    else
+    elseif config.picker_type == "snacks" then
         return M.create_snacks_picker(opts)
+    else
+        vim.notify("Invalid picker type: " .. config.picker_type, vim.log.levels.ERROR)
+        return nil
     end
 end
 
@@ -118,7 +121,7 @@ function M.create_snacks_picker(opts)
         end,
     })
 
-    picker:find()
+    return picker
 end
 
 return M 
