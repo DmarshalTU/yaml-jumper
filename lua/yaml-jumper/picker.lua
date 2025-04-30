@@ -64,11 +64,12 @@ function M.create_snacks_picker(opts)
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
             local value = extract_value(item.text)
-            local display = string.format("%-40s %s", item.path, value)
             
             table.insert(entries, {
                 value = item,
-                display = display,
+                display = function()
+                    return string.format("%-40s %s", item.path, value)
+                end,
                 text = item.text,
                 lnum = item.line or 1,
                 col = 1,
@@ -77,6 +78,8 @@ function M.create_snacks_picker(opts)
                 filename = current_file,
                 path = item.path,
                 value_text = value,
+                label = item.path,
+                description = value,
             })
         end
     end
