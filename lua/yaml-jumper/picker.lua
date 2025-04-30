@@ -83,15 +83,15 @@ function M.create_snacks_picker(opts)
         local entry = {
             value = item,
             text = item.text,
-            lnum = item.line or item.lnum,
+            lnum = item.lnum or item.line,
             col = 0,
-            buf = current_buf,
-            file = current_file,
-            filename = current_file,
+            buf = item.buf or current_buf,
+            file = item.file or current_file,
+            filename = item.filename or current_file,
             path = item.path,
-            value_text = value,
+            value_text = item.value_text or value,
             label = item.path,
-            description = value
+            description = item.value_text or value
         }
 
         -- Debug log the created entry
@@ -222,30 +222,26 @@ function M.create_snacks_picker(opts)
             if not entry or not entry.value then return end
             local item = entry.value
             local filename = item.filename
-            local start_line = math.max(1, item.lnum - 5)
-            local end_line = item.lnum + 5
+            local lnum = item.lnum or 1
+            local start_line = math.max(1, lnum - 5)
+            local end_line = lnum + 5
             local lines
-            if filename and filename ~= "" then
-                lines = vim.fn.readfile(filename, "", end_line)
+            if filename and filename ~= "" and vim.fn.filereadable(filename) == 1 then
+                lines = vim.fn.readfile(filename)
             else
-                -- fallback to current buffer lines
                 lines = vim.api.nvim_buf_get_lines(item.buf or 0, 0, -1, false)
             end
             local context = {}
-            
             for i = start_line, math.min(end_line, #lines) do
-                if i == item.lnum then
-                    table.insert(context, "> " .. lines[i])
+                if i == lnum then
+                    table.insert(context, "> " .. (lines[i] or ""))
                 else
-                    table.insert(context, "  " .. lines[i])
+                    table.insert(context, "  " .. (lines[i] or ""))
                 end
             end
-
             return {
-                filetype = "yaml",
-                contents = context,
-                syntax = "yaml",
-                highlight_line = item.lnum - start_line + 1,
+                text = table.concat(context, "\n"),
+                ft = "yaml"
             }
         end
     })
