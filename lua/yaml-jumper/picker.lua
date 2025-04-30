@@ -118,11 +118,15 @@ function M.create_snacks_picker(opts)
             close = true,
             match = false
         },
-        keys = {
-            q = "close",
-            ["<CR>"] = "jump",
-            ["<C-c>"] = "close",
-        },
+        win = {
+            input = {
+                keys = {
+                    ["<CR>"] = { "confirm", mode = { "n", "i" } },
+                    ["<C-c>"] = { "close", mode = { "n", "i" } },
+                    q = "close"
+                }
+            }
+        }
     })
 end
 
