@@ -71,7 +71,11 @@ function M.create_snacks_picker(opts)
                 lnum = item.line or 1,
                 text = display,
                 label = item.path,
-                description = value
+                description = value,
+                jump = {
+                    line = item.line or 1,
+                    col = 0
+                }
             })
         end
     end
@@ -107,15 +111,16 @@ function M.create_snacks_picker(opts)
                 vim.api.nvim_buf_set_option(bufnr, "filetype", "yaml")
             end
         },
-        on_select = function(selection)
-            if selection and selection.value and selection.value.line then
-                local line = selection.value.line
-                vim.api.nvim_win_set_cursor(0, {line, 0})
-            end
-        end,
+        jump = {
+            jumplist = true,
+            tagstack = false,
+            reuse_win = false,
+            close = true,
+            match = false
+        },
         keys = {
             q = "close",
-            ["<CR>"] = "select",
+            ["<CR>"] = "jump",
             ["<C-c>"] = "close",
         },
     })
