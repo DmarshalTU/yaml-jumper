@@ -1095,7 +1095,6 @@ function M.jump_to_path()
                 end
             end
             return {
-                value = entry,
                 display = display,
                 ordinal = (is_history and "0" or "1") .. entry.path,
                 filename = entry.filename,
