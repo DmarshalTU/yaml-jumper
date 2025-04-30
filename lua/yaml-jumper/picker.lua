@@ -70,12 +70,14 @@ function M.create_snacks_picker(opts)
         -- Extract value from text if not provided
         local value = item.value
         if not value then
+            -- Try to extract value from the line
             local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
             if val then
                 value = val:gsub("^%s*(.-)%s*$", "%1")
             end
         end
 
+        -- Create a clean entry with only the relevant information
         local entry = {
             value = item,
             text = item.text,
@@ -153,11 +155,41 @@ function M.create_snacks_picker(opts)
             end
         end,
         format = function(item)
+            -- Only show the value if it exists and isn't empty
             local display = item.path
             if item.value_text and item.value_text ~= "" then
                 display = string.format("%s = %s", item.path, item.value_text)
             end
             return { { display, "Comment" } }
+        end,
+        preview = function(entry)
+            if not entry or not entry.value then return end
+            local item = entry.value
+            local filename = item.filename
+            if not filename then return end
+
+            -- Get the current line and some context
+            local start_line = math.max(1, item.lnum - 5)
+            local end_line = item.lnum + 5
+            local lines = vim.fn.readfile(filename, "", end_line)
+            local context = {}
+            
+            -- Add context lines
+            for i = start_line, math.min(end_line, #lines) do
+                if i == item.lnum then
+                    -- Highlight the current line
+                    table.insert(context, "> " .. lines[i])
+                else
+                    table.insert(context, "  " .. lines[i])
+                end
+            end
+
+            return {
+                filetype = "yaml",
+                contents = context,
+                syntax = "yaml",
+                highlight_line = item.lnum - start_line + 1,
+            }
         end
     })
 
