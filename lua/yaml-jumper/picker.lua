@@ -47,12 +47,36 @@ end
 function M.create_snacks_picker(opts)
     local Snacks = require("snacks")
     
+    -- Setup logging
+    local log_file = vim.fn.expand("~/.local/share/nvim/yaml-jumper.log")
+    local function log(msg)
+        local file = io.open(log_file, "a")
+        if file then
+            file:write(os.date("%Y-%m-%d %H:%M:%S") .. " - " .. msg .. "\n")
+            file:close()
+        end
+    end
+    
+    -- Clear previous log
+    local file = io.open(log_file, "w")
+    if file then file:close() end
+    
+    -- Log input options
+    log("Input options: " .. vim.inspect(opts))
+    
     -- Create entries for snacks
     local entries = {}
     local current_file = vim.api.nvim_buf_get_name(0)
     local seen_paths = {} -- Track seen paths to avoid duplicates
     
+    -- Log the results
+    log("Results count: " .. #opts.results)
+    log("First result: " .. vim.inspect(opts.results[1]))
+    
     for _, item in ipairs(opts.results) do
+        -- Log each item
+        log("Processing item: " .. vim.inspect(item))
+        
         -- Skip if we've already seen this path
         if seen_paths[item.path] then
             goto continue
@@ -64,6 +88,9 @@ function M.create_snacks_picker(opts)
         if item.value then
             display = display .. ": " .. item.value
         end
+        
+        -- Log the display string
+        log("Created display: " .. display)
         
         -- Create the entry
         local snack_entry = {
@@ -78,10 +105,17 @@ function M.create_snacks_picker(opts)
             key = item.key
         }
         
+        -- Log the snack entry
+        log("Created snack entry: " .. vim.inspect(snack_entry))
+        
         table.insert(entries, snack_entry)
         
         ::continue::
     end
+    
+    -- Log the final entries
+    log("Final entries count: " .. #entries)
+    log("First entry: " .. vim.inspect(entries[1]))
     
     -- Create the picker using Snacks.picker
     local picker = Snacks.picker({
