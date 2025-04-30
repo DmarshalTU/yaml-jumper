@@ -75,7 +75,7 @@ function M.create_snacks_picker(opts)
             filename = filename,
             bufnr = bufnr,
             file = filename,
-            lnum = entry.lnum or 1,
+            lnum = entry.lnum or entry.line or 1,
             text = entry.text or display,
             path = entry.path,
             value_text = entry.value_text,
@@ -89,8 +89,8 @@ function M.create_snacks_picker(opts)
             end
         end
         
-        -- Only add the entry if it has a valid display string
-        if display ~= "Unknown" then
+        -- Only add the entry if it has a valid display string and path
+        if display ~= "Unknown" and (snack_entry.path or snack_entry.key) then
             table.insert(entries, snack_entry)
         end
     end
