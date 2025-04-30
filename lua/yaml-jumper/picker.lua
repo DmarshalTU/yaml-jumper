@@ -222,17 +222,21 @@ function M.create_snacks_picker(opts)
             if not entry or not entry.value then return end
             local item = entry.value
             local filename = item.filename
-            local lnum = item.lnum or 1
-            local start_line = math.max(1, lnum - 5)
-            local end_line = lnum + 5
+            local lnum = tonumber(item.lnum) or 1
             local lines
             if filename and filename ~= "" and vim.fn.filereadable(filename) == 1 then
                 lines = vim.fn.readfile(filename)
             else
                 lines = vim.api.nvim_buf_get_lines(item.buf or 0, 0, -1, false)
             end
+            if not lines or #lines == 0 then
+                return { text = "(no lines)", ft = "yaml" }
+            end
+            lnum = math.max(1, math.min(lnum, #lines))
+            local start_line = math.max(1, lnum - 5)
+            local end_line = math.min(#lines, lnum + 5)
             local context = {}
-            for i = start_line, math.min(end_line, #lines) do
+            for i = start_line, end_line do
                 if i == lnum then
                     table.insert(context, "> " .. (lines[i] or ""))
                 else
