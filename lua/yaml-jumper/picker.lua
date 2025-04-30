@@ -67,6 +67,9 @@ function M.create_snacks_picker(opts)
 
     -- Create entries for snacks
     for _, item in ipairs(opts.results) do
+        -- Debug log the item
+        log(string.format("Processing item: %s", vim.inspect(item)))
+        
         -- Extract value from text if not provided
         local value = item.value
         if not value then
@@ -96,6 +99,9 @@ function M.create_snacks_picker(opts)
                 loc = true
             }
         }
+        
+        -- Debug log the entry
+        log(string.format("Created entry: %s", vim.inspect(entry)))
         
         table.insert(entries, entry)
     end
@@ -145,8 +151,14 @@ function M.create_snacks_picker(opts)
             },
         },
         on_select = function(selection)
-            if not selection or not selection.value then return end
+            if not selection or not selection.value then 
+                log("No selection or value in on_select")
+                return 
+            end
             local item = selection.value
+            
+            -- Debug log the selection
+            log(string.format("Selected item: %s", vim.inspect(item)))
             
             -- Open the file if needed
             if vim.fn.expand("%:p") ~= item.filename then
@@ -155,7 +167,10 @@ function M.create_snacks_picker(opts)
 
             -- Jump to the beginning of the line
             if item.lnum then
+                log(string.format("Jumping to line %d", item.lnum))
                 vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
+            else
+                log("No line number found in item")
             end
             
             -- Add to history if on_select callback exists
@@ -208,8 +223,14 @@ function M.create_snacks_picker(opts)
             }
         end,
         values = function(entry)
-            if not entry or not entry.value then return {} end
+            if not entry or not entry.value then 
+                log("No entry or value in values function")
+                return {} 
+            end
             local item = entry.value
+            
+            -- Debug log the entry
+            log(string.format("Processing values for entry: %s", vim.inspect(item)))
             
             -- Extract value from text if not already available
             local value = item.value_text
@@ -220,10 +241,16 @@ function M.create_snacks_picker(opts)
                 end
             end
             
+            -- Debug log the extracted value
+            log(string.format("Extracted value: %s", value))
+            
             -- Return the value with its path for context
             if value and value ~= "" then
-                return { item.path .. " = " .. value }
+                local result = { item.path .. " = " .. value }
+                log(string.format("Returning value: %s", vim.inspect(result)))
+                return result
             end
+            log("No value found, returning empty table")
             return {}
         end
     })
