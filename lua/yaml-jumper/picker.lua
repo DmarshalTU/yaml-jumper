@@ -230,4 +230,3 @@ function M.create_snacks_picker(opts)
 end
 
 return M 
-return M 
