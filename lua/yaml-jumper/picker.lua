@@ -49,9 +49,11 @@ function M.create_snacks_picker(opts)
     
     -- Create entries for snacks
     local entries = {}
+    local current_file = vim.api.nvim_buf_get_name(0)
+    
     for _, item in ipairs(opts.results) do
         local entry = opts.entry_maker(item)
-        local filename = entry.filename or vim.api.nvim_buf_get_name(0)
+        local filename = entry.filename or current_file
         local bufnr = vim.fn.bufnr(filename)
         
         -- Create a proper display string
@@ -65,7 +67,8 @@ function M.create_snacks_picker(opts)
         -- Create a proper ordinal for sorting
         local ordinal = entry.path or entry.key or display
         
-        table.insert(entries, {
+        -- Create the entry with all required fields
+        local snack_entry = {
             value = entry.value or item,
             display = display,
             ordinal = ordinal,
@@ -76,7 +79,16 @@ function M.create_snacks_picker(opts)
             text = entry.text or display,
             path = entry.path,
             value_text = entry.value_text
-        })
+        }
+        
+        -- Add any additional fields from the original entry
+        for k, v in pairs(entry) do
+            if not snack_entry[k] then
+                snack_entry[k] = v
+            end
+        end
+        
+        table.insert(entries, snack_entry)
     end
     
     -- Create the picker using Snacks.picker
