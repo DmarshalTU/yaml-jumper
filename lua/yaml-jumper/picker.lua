@@ -1,7 +1,7 @@
 local M = {}
 
 -- Create a picker based on the configured type
-function M.create_picker(opts)
+function M.create_picker(opts, config)
     if config.picker_type == "telescope" then
         return M.create_telescope_picker(opts)
     else
