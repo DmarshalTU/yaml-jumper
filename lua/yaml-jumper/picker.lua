@@ -61,36 +61,33 @@ function M.create_snacks_picker(opts)
     local file = io.open(log_file, "w")
     if file then file:close() end
     
-    -- Log input options
-    log("Input options: " .. vim.inspect(opts))
+    -- Helper function to extract value from YAML text
+    local function extract_value(text)
+        if not text then return nil end
+        local _, value = text:match("^[^:]+:%s*(.+)$")
+        return value
+    end
     
     -- Create entries for snacks
     local entries = {}
     local current_file = vim.api.nvim_buf_get_name(0)
     local seen_paths = {} -- Track seen paths to avoid duplicates
     
-    -- Log the results
-    log("Results count: " .. #opts.results)
-    log("First result: " .. vim.inspect(opts.results[1]))
-    
     for _, item in ipairs(opts.results) do
-        -- Log each item
-        log("Processing item: " .. vim.inspect(item))
-        
         -- Skip if we've already seen this path
         if seen_paths[item.path] then
             goto continue
         end
         seen_paths[item.path] = true
         
+        -- Extract value from text
+        local value = extract_value(item.text)
+        
         -- Create the display string
         local display = item.path
-        if item.value then
-            display = display .. ": " .. item.value
+        if value then
+            display = display .. ": " .. value
         end
-        
-        -- Log the display string
-        log("Created display: " .. display)
         
         -- Create the entry
         local snack_entry = {
@@ -102,20 +99,14 @@ function M.create_snacks_picker(opts)
             lnum = item.line,
             text = item.text,
             path = item.path,
-            key = item.key
+            key = item.key,
+            value_text = value
         }
-        
-        -- Log the snack entry
-        log("Created snack entry: " .. vim.inspect(snack_entry))
         
         table.insert(entries, snack_entry)
         
         ::continue::
     end
-    
-    -- Log the final entries
-    log("Final entries count: " .. #entries)
-    log("First entry: " .. vim.inspect(entries[1]))
     
     -- Create the picker using Snacks.picker
     local picker = Snacks.picker({
