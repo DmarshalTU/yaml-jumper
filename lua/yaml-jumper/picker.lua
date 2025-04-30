@@ -51,11 +51,16 @@ function M.create_snacks_picker(opts)
     local entries = {}
     for _, item in ipairs(opts.results) do
         local entry = opts.entry_maker(item)
+        local filename = entry.filename or vim.api.nvim_buf_get_name(0)
+        local bufnr = vim.fn.bufnr(filename)
+        
         table.insert(entries, {
             value = entry.value,
             display = entry.display,
             ordinal = entry.ordinal,
-            filename = entry.filename,
+            filename = filename,
+            bufnr = bufnr,
+            file = filename,
             lnum = entry.lnum,
             text = entry.text,
             path = entry.path,
