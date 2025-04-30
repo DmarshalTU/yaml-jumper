@@ -48,24 +48,37 @@ end
 
 -- Create a snacks picker
 function M.create_snacks_picker(opts)
+    -- Debug: Print input options
+    vim.notify("Input options: " .. vim.inspect(opts), vim.log.levels.DEBUG)
+    
     local entries = {}
     local seen_paths = {}
     local current_buf = vim.api.nvim_get_current_buf()
     local current_file = vim.api.nvim_buf_get_name(current_buf)
 
+    -- Debug: Print current buffer info
+    vim.notify("Current buffer: " .. current_buf .. ", file: " .. current_file, vim.log.levels.DEBUG)
+
     -- Helper function to extract value from YAML text
     local function extract_value(text)
+        if not text then return "" end
         local value = text:match(":%s*(.+)$")
         return value and value:gsub("^%s*(.-)%s*$", "%1") or ""
     end
 
     -- Create entries for snacks
     for _, item in ipairs(opts.results) do
+        -- Debug: Print each item being processed
+        vim.notify("Processing item: " .. vim.inspect(item), vim.log.levels.DEBUG)
+        
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
             local value = extract_value(item.text)
             
-            table.insert(entries, {
+            -- Debug: Print extracted value
+            vim.notify("Path: " .. item.path .. ", Value: " .. value, vim.log.levels.DEBUG)
+            
+            local entry = {
                 value = item,
                 display = function()
                     return string.format("%-40s = %s", item.path, value)
@@ -84,9 +97,17 @@ function M.create_snacks_picker(opts)
                     line = item.line or 1,
                     col = 1
                 }
-            })
+            }
+            
+            -- Debug: Print created entry
+            vim.notify("Created entry: " .. vim.inspect(entry), vim.log.levels.DEBUG)
+            
+            table.insert(entries, entry)
         end
     end
+
+    -- Debug: Print final entries count
+    vim.notify("Total entries created: " .. #entries, vim.log.levels.DEBUG)
 
     -- Create the picker with proper configuration
     local picker = require("snacks").picker({
@@ -102,6 +123,9 @@ function M.create_snacks_picker(opts)
             match = false,
         },
         preview = function(entry)
+            -- Debug: Print preview request
+            vim.notify("Preview requested for: " .. vim.inspect(entry), vim.log.levels.DEBUG)
+            
             if not entry or not entry.value then return end
             local item = entry.value
             local filename = item.filename
@@ -124,6 +148,9 @@ function M.create_snacks_picker(opts)
             }
         end,
         on_select = function(selection)
+            -- Debug: Print selection
+            vim.notify("Selection made: " .. vim.inspect(selection), vim.log.levels.DEBUG)
+            
             if not selection or not selection.value then return end
             local item = selection.value
             local filename = item.filename
