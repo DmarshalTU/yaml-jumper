@@ -218,20 +218,9 @@ function M.create_snacks_picker(opts)
                 end
             end
             
-            -- Get the parent path for context
-            local path_parts = vim.split(item.path, ".", { plain = true })
-            local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
-            
-            -- Format the value with context
-            local formatted_value = {}
-            if parent_path ~= "" then
-                table.insert(formatted_value, parent_path .. ":")
-            end
-            table.insert(formatted_value, "  " .. path_parts[#path_parts] .. ": " .. (value or ""))
-            
             -- Only return the value if it exists and isn't empty
             if value and value ~= "" then
-                return formatted_value
+                return { value }
             end
             return {}
         end
