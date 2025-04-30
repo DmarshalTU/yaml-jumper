@@ -190,6 +190,17 @@ function M.create_snacks_picker(opts)
                 syntax = "yaml",
                 highlight_line = item.lnum - start_line + 1,
             }
+        end,
+        values = function(entry)
+            if not entry or not entry.value then return {} end
+            local item = entry.value
+            local value = item.value_text or ""
+            
+            -- Only return the value if it exists and isn't empty
+            if value and value ~= "" then
+                return { value }
+            end
+            return {}
         end
     })
 
