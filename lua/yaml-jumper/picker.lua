@@ -55,7 +55,6 @@ function M.create_snacks_picker(opts)
     for _, item in ipairs(opts.results) do
         local entry = opts.entry_maker(item)
         local filename = entry.filename or current_file
-        local bufnr = vim.fn.bufnr(filename)
         
         -- Create a unique key for this entry
         local entry_key = string.format("%s:%s:%d", filename, entry.path or entry.key or "", entry.lnum or entry.line or 0)
@@ -79,25 +78,16 @@ function M.create_snacks_picker(opts)
         
         -- Create the entry with all required fields
         local snack_entry = {
-            value = entry.value or item,
+            value = entry,
             display = display,
             ordinal = ordinal,
             filename = filename,
-            bufnr = bufnr,
-            file = filename,
             lnum = entry.lnum or entry.line or 1,
             text = entry.text or display,
             path = entry.path,
             value_text = entry.value_text or entry.value,
             key = entry.key
         }
-        
-        -- Add any additional fields from the original entry
-        for k, v in pairs(entry) do
-            if not snack_entry[k] then
-                snack_entry[k] = v
-            end
-        end
         
         -- Only add the entry if it has a valid display string and path
         if display ~= "Unknown" and (snack_entry.path or snack_entry.key) then
@@ -117,13 +107,13 @@ function M.create_snacks_picker(opts)
             end
         end,
         preview = function(entry)
-            if not entry.bufnr then return end
+            if not entry.filename then return end
             
             -- Create a preview buffer
             local preview_bufnr = vim.api.nvim_create_buf(false, true)
             
             -- Get the content around the target line
-            local lines = vim.api.nvim_buf_get_lines(entry.bufnr, 0, -1, false)
+            local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(entry.filename), 0, -1, false)
             local start_line = math.max(0, entry.lnum - 5)
             local end_line = math.min(#lines, entry.lnum + 5)
             
@@ -168,6 +158,24 @@ function M.create_snacks_picker(opts)
         layout = {
             preset = "default",
             preview = "main"
+        },
+        -- Add Snacks-specific options to avoid conflicts
+        picker = {
+            enabled = true,
+            preview = true,
+            preview_lines = 10,
+            preview_border = "rounded",
+            preview_highlight = "Normal",
+            preview_winblend = 0,
+            preview_winhighlight = "Normal:NormalFloat",
+            preview_winopts = {
+                relative = "editor",
+                style = "minimal",
+                border = "rounded",
+                title = "YAML Preview",
+                title_pos = "center",
+                zindex = 50
+            }
         }
     })
     
