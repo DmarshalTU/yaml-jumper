@@ -1024,15 +1024,17 @@ function M.jump_to_path()
     local paths = M.get_yaml_paths(lines)
     local history_items = utils.get_history("paths")
     local has_history = #history_items > 0
+    local filename = vim.api.nvim_buf_get_name(bufnr)
 
     local picker_opts = {
         prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
         results = vim.tbl_map(function(entry)
             return {
                 buf = bufnr,
-                lnum = entry.line,
+                lnum = entry.line, -- snacks expects lnum, telescope is fine with it too
                 text = entry.text,
                 path = entry.path,
+                filename = filename, -- snacks expects filename, telescope ignores extra fields
             }
         end, paths),
         entry_maker = function(entry)
@@ -1053,9 +1055,10 @@ function M.jump_to_path()
                 text = entry.text,
                 path = entry.path,
                 is_history = is_history,
+                filename = entry.filename,
             }
         end,
-        previewer = nil, -- snacks will use its own preview logic if buf/lnum/text are present
+        previewer = nil,
         on_select = function(selection)
             pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
             utils.add_to_history(selection.path, "paths")
@@ -1161,52 +1164,27 @@ end
 
 -- Jump to a YAML value using telescope
 function M.jump_to_value()
-    -- Get lines of current buffer
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
-    
-    -- Get all values
     local values = M.get_yaml_values(lines)
-    
-    -- Get history
     local history_items = utils.get_history("values")
     local has_history = #history_items > 0
-    
-    -- Preview function for values
-    local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "YAML Context Preview",
-        define_preview = function(self, entry, status)
-            local content = {}
-            local lnum = entry.lnum
-            
-            -- Try to show some context around the value
-            local start_line = math.max(1, lnum - 5)
-            local end_line = math.min(#lines, lnum + 5)
-            
-            -- Add context lines
-            for i = start_line, end_line do
-                if i == lnum then
-                    -- Highlight the current line
-                    table.insert(content, "> " .. lines[i])
-                else
-                    table.insert(content, "  " .. lines[i])
-                end
-            end
-            
-            -- Add the content to the preview buffer
-            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
-            
-            -- Syntax highlighting for YAML
-            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
-        end
-    })
-    
-    -- Create picker options
+    local filename = vim.api.nvim_buf_get_name(bufnr)
+
     local picker_opts = {
         prompt_title = has_history and "YAML Value Search (Recent First)" or "YAML Value Search",
-        results = values,
+        results = vim.tbl_map(function(entry)
+            return {
+                buf = bufnr,
+                lnum = entry.line,
+                text = entry.text,
+                path = entry.path,
+                filename = filename,
+                value_text = entry.value,
+            }
+        end, values),
         entry_maker = function(entry)
-            local path_value = entry.path .. ": " .. entry.value
+            local path_value = entry.path .. ": " .. (entry.value_text or "")
             local is_history = false
             for _, h in ipairs(history_items) do
                 if h == path_value then
@@ -1215,43 +1193,28 @@ function M.jump_to_value()
                     break
                 end
             end
-            local filename = vim.api.nvim_buf_get_name(0)
-            local lnum = entry.line
-            local text = entry.text or (lnum and vim.api.nvim_buf_get_lines(0, lnum-1, lnum, false)[1]) or ""
             return {
-                value = {
-                    path = entry.path,
-                    text = text,
-                    lnum = lnum,
-                    line = lnum,
-                    filename = filename,
-                    buf = vim.api.nvim_get_current_buf(),
-                    value_text = entry.value,
-                },
+                value = entry,
                 display = path_value,
-                ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
-                lnum = lnum,
-                line = lnum,
-                text = text,
+                ordinal = (is_history and "0" or "1") .. entry.path .. " " .. (entry.value_text or ""),
+                lnum = entry.lnum,
+                text = entry.text,
                 path = entry.path,
-                value_text = entry.value,
+                value_text = entry.value_text,
                 is_history = is_history,
-                filename = filename,
+                filename = entry.filename,
             }
         end,
-        previewer = previewer,
+        previewer = nil,
         on_select = function(selection)
             pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
-            -- Add to history
-            utils.add_to_history(selection.path .. ": " .. selection.value_text, "values")
+            utils.add_to_history(selection.path .. ": " .. (selection.value_text or ""), "values")
         end,
         on_attach = function(prompt_bufnr, map)
-            -- Add edit action
             M.add_edit_action(prompt_bufnr, map)
         end
     }
-    
-    -- Create and show the picker
+
     local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
     picker:find()
 end
