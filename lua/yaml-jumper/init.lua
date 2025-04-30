@@ -1094,10 +1094,11 @@ function M.jump_to_path()
                 display = display,
                 ordinal = (is_history and "0" or "1") .. entry.path, -- Sort history first
                 path = entry.path,
-                lnum = entry.line,
+                lnum = entry.line,         -- snacks expects this
+                line = entry.line,         -- snacks expects this too!
                 text = entry.text,
                 is_history = is_history,
-                filename = vim.api.nvim_buf_get_name(0), -- <-- ADDED for snacks compatibility
+                filename = vim.api.nvim_buf_get_name(0),
             }
         end,
         previewer = previewer,
@@ -1270,12 +1271,13 @@ function M.jump_to_value()
                 value = entry,
                 display = path_value,
                 ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
-                lnum = entry.line,
+                lnum = entry.line,         -- snacks expects this
+                line = entry.line,         -- snacks expects this too!
                 text = entry.text,
                 path = entry.path,
                 value_text = entry.value,
                 is_history = is_history,
-                filename = vim.api.nvim_buf_get_name(0), -- <-- ADDED for snacks compatibility
+                filename = vim.api.nvim_buf_get_name(0),
             }
         end,
         previewer = previewer,
