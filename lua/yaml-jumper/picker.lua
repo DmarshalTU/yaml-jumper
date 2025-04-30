@@ -56,110 +56,51 @@ function M.create_snacks_picker(opts)
     
     -- Create entries for snacks
     local entries = {}
-    local current_file = vim.api.nvim_buf_get_name(0)
-    local seen_paths = {} -- Track seen paths to avoid duplicates
+    local seen_paths = {}
     
     for _, item in ipairs(opts.results) do
-        -- Skip if we've already seen this path
-        if seen_paths[item.path] then
-            goto continue
+        if not seen_paths[item.path] then
+            seen_paths[item.path] = true
+            local display = string.format("%-40s %s", item.path, item.value_text or item.text or "")
+            table.insert(entries, {
+                value = item,
+                display = display,
+                ordinal = item.path .. " " .. (item.value_text or item.text or ""),
+                filename = item.filename,
+                lnum = item.line or 1,
+                text = display,
+            })
         end
-        seen_paths[item.path] = true
-        
-        -- Extract value from text
-        local value = extract_value(item.text)
-        
-        -- Create the entry with all required fields
-        local snack_entry = {
-            -- Core fields
-            value = item,
-            ordinal = item.path,
-            filename = current_file,
-            file = current_file,
-            lnum = item.line or 1,
-            text = item.text,
-            path = item.path,
-            key = item.key,
-            value_text = value,
-            
-            -- Snacks display fields
-            label = item.path,
-            description = value or "",
-            value = value,
-            
-            -- Custom display
-            display = function()
-                return string.format("%-40s %s", item.path, value or "")
-            end
-        }
-        
-        table.insert(entries, snack_entry)
-        
-        ::continue::
     end
     
-    -- Create the picker using Snacks.picker
-    local picker = Snacks.picker({
-        prompt = opts.prompt_title,
+    return Snacks.picker({
         items = entries,
+        title = " YAML Paths ",
+        title_pos = "center",
+        border = "rounded",
+        width = 0.8,
+        height = 0.6,
+        preview = {
+            enabled = true,
+            filetype = "yaml",
+            lines = 10,
+        },
         on_select = function(selection)
             if selection and selection.value and selection.value.line then
-                -- Jump to the line
+                local bufnr = vim.fn.bufnr(selection.value.filename)
+                if bufnr == -1 then
+                    bufnr = vim.fn.bufadd(selection.value.filename)
+                end
+                vim.api.nvim_set_current_buf(bufnr)
                 vim.api.nvim_win_set_cursor(0, {selection.value.line, 0})
-                -- Add to history if the callback exists
-                if opts.on_select then
-                    opts.on_select(selection)
-                end
             end
         end,
-        preview = function(entry)
-            if not entry.filename then return end
-            
-            -- Create a preview buffer
-            local preview_bufnr = vim.api.nvim_create_buf(false, true)
-            
-            -- Get the content around the target line
-            local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(entry.filename), 0, -1, false)
-            local start_line = math.max(0, (entry.value and entry.value.line or entry.lnum) - 5)
-            local end_line = math.min(#lines, (entry.value and entry.value.line or entry.lnum) + 5)
-            
-            local preview_lines = {}
-            for i = start_line, end_line do
-                if i == (entry.value and entry.value.line or entry.lnum) - 1 then
-                    -- Highlight the current line
-                    table.insert(preview_lines, "> " .. lines[i])
-                else
-                    table.insert(preview_lines, "  " .. lines[i])
-                end
-            end
-            
-            -- Set the preview content
-            vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, preview_lines)
-            
-            -- Set filetype for syntax highlighting
-            vim.api.nvim_buf_set_option(preview_bufnr, "filetype", "yaml")
-            
-            return preview_bufnr
-        end,
-        attach_mappings = function(map)
-            if opts.on_attach then
-                opts.on_attach(nil, map)
-            end
-        end,
-        matcher = {
-            fuzzy = true,
-            smartcase = true,
-            ignorecase = true
+        keys = {
+            q = "close",
+            ["<CR>"] = "select",
+            ["<C-c>"] = "close",
         },
-        sort = {
-            fields = { "ordinal" }
-        },
-        layout = {
-            preview = "main"
-        }
     })
-    
-    return picker
 end
 
 return M 
