@@ -123,6 +123,14 @@ function M.create_snacks_picker(opts)
             smartcase = true,
             ignorecase = true,
             sort_empty = false,
+            -- Add exact matching for paths
+            match_fn = function(item, query)
+                if not query or query == "" then return true end
+                -- First try exact match
+                if item.path == query then return true end
+                -- Then try fuzzy match
+                return item.path:lower():find(query:lower(), 1, true) ~= nil
+            end
         },
         sort = {
             fields = { "score:desc", "#text", "idx" },
@@ -145,9 +153,8 @@ function M.create_snacks_picker(opts)
                 vim.cmd("edit " .. item.filename)
             end
 
-            -- Jump to the line and center it
+            -- Jump to the beginning of the line
             vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
-            vim.cmd("normal! zz")
             
             -- Add to history if on_select callback exists
             if opts.on_select then
@@ -211,9 +218,20 @@ function M.create_snacks_picker(opts)
                 end
             end
             
+            -- Get the parent path for context
+            local path_parts = vim.split(item.path, ".", { plain = true })
+            local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
+            
+            -- Format the value with context
+            local formatted_value = {}
+            if parent_path ~= "" then
+                table.insert(formatted_value, parent_path .. ":")
+            end
+            table.insert(formatted_value, "  " .. path_parts[#path_parts] .. ": " .. (value or ""))
+            
             -- Only return the value if it exists and isn't empty
             if value and value ~= "" then
-                return { value }
+                return formatted_value
             end
             return {}
         end
