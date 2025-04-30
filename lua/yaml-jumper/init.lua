@@ -82,30 +82,28 @@ local config = {
                 end
                 return display
             end,
-            preview = function(entry)
-                if not entry or not entry.value then return end
-                local item = entry.value
-                local filename = item.filename
-                if not filename then return end
-
-                local start_line = math.max(1, item.lnum - 5)
-                local end_line = item.lnum + 5
-                local lines = vim.fn.readfile(filename, "", end_line)
+            preview = function(item)
+                local lines
+                if item.file and type(item.file) == "string" and vim.fn.filereadable(item.file) == 1 then
+                    lines = vim.fn.readfile(item.file)
+                else
+                    -- fallback: get lines from current buffer
+                    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+                end
+                local lnum = item.lnum or 1
+                local start_line = math.max(1, lnum - 5)
+                local end_line = math.min(#lines, lnum + 5)
                 local context = {}
-                
-                for i = start_line, math.min(end_line, #lines) do
-                    if i == item.lnum then
-                        table.insert(context, "> " .. lines[i])
+                for i = start_line, end_line do
+                    if i == lnum then
+                        table.insert(context, "> " .. (lines[i] or ""))
                     else
-                        table.insert(context, "  " .. lines[i])
+                        table.insert(context, "  " .. (lines[i] or ""))
                     end
                 end
-
                 return {
-                    filetype = "yaml",
-                    contents = context,
-                    syntax = "yaml",
-                    highlight_line = item.lnum - start_line + 1,
+                    text = table.concat(context, "\n"),
+                    ft = "yaml"
                 }
             end,
             values = function(entry)
@@ -1079,10 +1077,11 @@ function M.jump_to_path()
         end
         picker_opts.preview = function(item)
             local lines
-            if item.file and vim.fn.filereadable(item.file) == 1 then
+            if item.file and type(item.file) == "string" and vim.fn.filereadable(item.file) == 1 then
                 lines = vim.fn.readfile(item.file)
             else
-                lines = {}
+                -- fallback: get lines from current buffer
+                lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
             end
             local lnum = item.lnum or 1
             local start_line = math.max(1, lnum - 5)
@@ -1748,7 +1747,13 @@ function M.debug_snacks_picker()
             return display
         end,
         preview = function(item)
-            local lines = vim.fn.readfile(item.file)
+            local lines
+            if item.file and type(item.file) == "string" and vim.fn.filereadable(item.file) == 1 then
+                lines = vim.fn.readfile(item.file)
+            else
+                -- fallback: get lines from current buffer
+                lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            end
             local lnum = item.lnum or 1
             local start_line = math.max(1, lnum - 5)
             local end_line = math.min(#lines, lnum + 5)
