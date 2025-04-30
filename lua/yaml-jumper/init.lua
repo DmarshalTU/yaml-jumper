@@ -1019,12 +1019,11 @@ end
 
 -- Jump to a YAML path using telescope
 function M.jump_to_path()
-    local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
     local paths = M.get_yaml_paths(lines)
     local history_items = utils.get_history("paths")
     local has_history = #history_items > 0
-    local filename = vim.api.nvim_buf_get_name(bufnr)
+    local filename = vim.api.nvim_buf_get_name(0)
 
     local picker_opts = {
         prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
@@ -1032,11 +1031,9 @@ function M.jump_to_path()
             local value = entry.text:match("^.-:%s*(.+)$")
             if value then value = value:gsub("^%s*(.-)%s*$", "%1") end
             return {
-                buf = bufnr,
                 lnum = entry.line,
                 text = entry.text,
                 path = entry.path,
-                filename = filename,
                 file = filename,
                 value_text = value or "",
             }
@@ -1054,12 +1051,10 @@ function M.jump_to_path()
             return {
                 display = display,
                 ordinal = (is_history and "0" or "1") .. entry.path,
-                buf = entry.buf,
                 lnum = entry.lnum,
                 text = entry.text,
                 path = entry.path,
                 is_history = is_history,
-                filename = entry.filename,
                 file = entry.file,
                 value_text = entry.value_text,
             }
@@ -1083,12 +1078,11 @@ function M.jump_to_path()
             return display
         end
         picker_opts.preview = function(item)
-            -- Show 5 lines before and after the key
             local lines
             if item.file and vim.fn.filereadable(item.file) == 1 then
                 lines = vim.fn.readfile(item.file)
             else
-                lines = vim.api.nvim_buf_get_lines(item.buf or 0, 0, -1, false)
+                lines = {}
             end
             local lnum = item.lnum or 1
             local start_line = math.max(1, lnum - 5)
@@ -1096,9 +1090,9 @@ function M.jump_to_path()
             local context = {}
             for i = start_line, end_line do
                 if i == lnum then
-                    table.insert(context, "> " .. lines[i])
+                    table.insert(context, "> " .. (lines[i] or ""))
                 else
-                    table.insert(context, "  " .. lines[i])
+                    table.insert(context, "  " .. (lines[i] or ""))
                 end
             end
             return {
