@@ -1031,10 +1031,11 @@ function M.jump_to_path()
         results = vim.tbl_map(function(entry)
             return {
                 buf = bufnr,
-                lnum = entry.line, -- snacks expects lnum, telescope is fine with it too
+                lnum = entry.line,
                 text = entry.text,
                 path = entry.path,
-                filename = filename, -- snacks expects filename, telescope ignores extra fields
+                filename = filename,
+                file = filename,
             }
         end, paths),
         entry_maker = function(entry)
@@ -1056,6 +1057,7 @@ function M.jump_to_path()
                 path = entry.path,
                 is_history = is_history,
                 filename = entry.filename,
+                file = entry.file,
             }
         end,
         previewer = nil,
@@ -1068,8 +1070,7 @@ function M.jump_to_path()
         end
     }
 
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
-    picker:find()
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
 -- Jump to a key prefix using telescope
@@ -1180,6 +1181,7 @@ function M.jump_to_value()
                 text = entry.text,
                 path = entry.path,
                 filename = filename,
+                file = filename,
                 value_text = entry.value,
             }
         end, values),
@@ -1203,6 +1205,7 @@ function M.jump_to_value()
                 value_text = entry.value_text,
                 is_history = is_history,
                 filename = entry.filename,
+                file = entry.file,
             }
         end,
         previewer = nil,
@@ -1215,8 +1218,7 @@ function M.jump_to_value()
         end
     }
 
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
-    picker:find()
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
 -- Search for YAML paths across multiple files
