@@ -47,87 +47,78 @@ end
 function M.create_snacks_picker(opts)
     local entries = {}
     local seen_paths = {}
-    local current_file = vim.api.nvim_buf_get_name(0)
-    local current_buf = vim.api.nvim_get_current_buf()
 
     -- Helper function to extract value from YAML text
     local function extract_value(text)
-        if not text then return "" end
-        local _, value = text:match("^[^:]+:%s*(.+)$")
-        return value or ""
+        local value = text:match(":%s*(.+)$")
+        return value and value:gsub("^%s*(.-)%s*$", "%1") or ""
     end
 
+    -- Create entries for snacks
     for _, item in ipairs(opts.results) do
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
-            local value = item.value or extract_value(item.text)
+            local value = extract_value(item.text)
             local display = string.format("%-40s %s", item.path, value)
+            
             table.insert(entries, {
                 value = item,
                 display = display,
-                ordinal = item.path .. " " .. value,
-                buf = current_buf,
-                file = current_file,
+                text = item.text,
                 lnum = item.line or 1,
-                text = display,
-                label = item.path,
-                description = value,
-                jump = {
-                    line = item.line or 1,
-                    col = 0
-                }
+                col = 1,
             })
         end
     end
 
-    return require("snacks").picker({
+    -- Create the picker with proper configuration
+    local picker = require("snacks").picker({
         items = entries,
-        title = " YAML Paths ",
-        title_pos = "center",
-        border = "rounded",
-        width = 0.8,
-        height = 0.6,
-        preview = {
-            enabled = true,
-            filetype = "yaml",
-            lines = 10,
-            show = function(entry, state)
-                local bufnr = state.bufnr
-                local lines = vim.api.nvim_buf_get_lines(current_buf, 0, -1, false)
-                local lnum = entry.lnum
-                local start_line = math.max(0, lnum - 5)
-                local end_line = math.min(#lines, lnum + 5)
-                local preview_lines = {}
-                
-                for i = start_line, end_line do
-                    if i == lnum - 1 then
-                        table.insert(preview_lines, "> " .. lines[i])
-                    else
-                        table.insert(preview_lines, "  " .. lines[i])
-                    end
-                end
-                
-                vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, preview_lines)
-                vim.api.nvim_buf_set_option(bufnr, "filetype", "yaml")
-            end
+        prompt = "YAML Jump: ",
+        layout = {
+            width = 0.8,
+            height = 0.8,
         },
         jump = {
             jumplist = true,
-            tagstack = false,
-            reuse_win = false,
             close = true,
-            match = false
+            match = false,
         },
-        win = {
-            input = {
-                keys = {
-                    ["<CR>"] = { "confirm", mode = { "n", "i" } },
-                    ["<C-c>"] = { "close", mode = { "n", "i" } },
-                    q = "close"
-                }
+        preview = function(entry)
+            if not entry or not entry.value then return end
+            local item = entry.value
+            local filename = item.filename
+            if not filename then return end
+
+            local start_line = math.max(1, item.line - 5)
+            local end_line = item.line + 5
+            local lines = vim.fn.readfile(filename, "", end_line)
+            local context = {}
+            
+            for i = start_line, math.min(end_line, #lines) do
+                table.insert(context, lines[i])
+            end
+
+            return {
+                filetype = "yaml",
+                contents = context,
+                syntax = "yaml",
+                highlight_line = item.line - start_line + 1,
             }
-        }
+        end,
+        on_select = function(selection)
+            if not selection or not selection.value then return end
+            local item = selection.value
+            local filename = item.filename
+            if not filename then return end
+
+            -- Open the file and jump to the line
+            vim.cmd("edit " .. filename)
+            vim.api.nvim_win_set_cursor(0, {item.line, 0})
+        end,
     })
+
+    picker:find()
 end
 
 return M 
