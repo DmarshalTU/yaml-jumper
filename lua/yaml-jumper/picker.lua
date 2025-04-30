@@ -61,76 +61,46 @@ end
 
 -- Create a snacks picker
 function M.create_snacks_picker(opts)
-    -- Clear log file at start
-    local file = io.open(log_file, "w")
-    if file then file:close() end
-    
-    -- Log input options
-    log("Input options: " .. vim.inspect(opts))
-    
     local entries = {}
-    local seen_paths = {}
     local current_buf = vim.api.nvim_get_current_buf()
     local current_file = vim.api.nvim_buf_get_name(current_buf)
 
-    -- Log current buffer info
-    log("Current buffer: " .. current_buf .. ", file: " .. current_file)
-
-    -- Helper function to extract value from YAML text
-    local function extract_value(text)
-        if not text then return "" end
-        local value = text:match(":%s*(.+)$")
-        return value and value:gsub("^%s*(.-)%s*$", "%1") or ""
-    end
-
     -- Create entries for snacks
     for _, item in ipairs(opts.results) do
-        -- Log each item being processed
-        log("Processing item: " .. vim.inspect(item))
-        
-        if not seen_paths[item.path] then
-            seen_paths[item.path] = true
-            local value = item.value or extract_value(item.text)
-            
-            -- Log extracted value
-            log("Path: " .. item.path .. ", Value: " .. value)
-            
-            local entry = {
-                value = item,
-                display = function()
-                    if value and value ~= "" then
-                        return string.format("%-40s = %s", item.path, value)
-                    else
-                        return item.path
-                    end
-                end,
-                text = item.text,
-                lnum = item.line or 1,
-                col = 1,
-                buf = current_buf,
-                file = current_file,
-                filename = current_file,
-                path = item.path,
-                value_text = value,
-                label = item.path,
-                description = value,
-                jump = {
-                    line = item.line or 1,
-                    col = 1
-                }
-            }
-            
-            -- Log created entry
-            log("Created entry: " .. vim.inspect(entry))
-            
-            table.insert(entries, entry)
+        local value = item.value or item.text:match(":%s*(.+)$")
+        if value then
+            value = value:gsub("^%s*(.-)%s*$", "%1")
         end
+
+        local entry = {
+            value = item,
+            display = function()
+                if value and value ~= "" then
+                    return string.format("%-40s = %s", item.path, value)
+                else
+                    return item.path
+                end
+            end,
+            text = item.text,
+            lnum = item.line,
+            col = 1,
+            buf = current_buf,
+            file = current_file,
+            filename = current_file,
+            path = item.path,
+            value_text = value,
+            label = item.path,
+            description = value,
+            jump = {
+                line = item.line,
+                col = 1
+            }
+        }
+        
+        table.insert(entries, entry)
     end
 
-    -- Log final entries count
-    log("Total entries created: " .. #entries)
-
-    -- Create the picker with proper configuration
+    -- Create the picker
     local picker = require("snacks").picker({
         items = entries,
         prompt = "YAML Jump: ",
@@ -144,9 +114,6 @@ function M.create_snacks_picker(opts)
             match = false,
         },
         preview = function(entry)
-            -- Log preview request
-            log("Preview requested for: " .. vim.inspect(entry))
-            
             if not entry or not entry.value then return end
             local item = entry.value
             local filename = item.filename
@@ -169,9 +136,6 @@ function M.create_snacks_picker(opts)
             }
         end,
         on_select = function(selection)
-            -- Log selection
-            log("Selection made: " .. vim.inspect(selection))
-            
             if not selection or not selection.value then return end
             local item = selection.value
             
