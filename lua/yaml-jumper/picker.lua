@@ -50,17 +50,21 @@ function M.create_snacks_picker(opts)
     -- Create entries for snacks
     local entries = {}
     local current_file = vim.api.nvim_buf_get_name(0)
-    local seen_paths = {} -- Track seen paths to avoid duplicates
+    local seen_entries = {} -- Track seen entries using a composite key
     
     for _, item in ipairs(opts.results) do
         local entry = opts.entry_maker(item)
         local filename = entry.filename or current_file
         local bufnr = vim.fn.bufnr(filename)
         
-        -- Skip if we've already seen this path
-        if entry.path and seen_paths[entry.path] then
+        -- Create a unique key for this entry
+        local entry_key = string.format("%s:%s:%d", filename, entry.path or entry.key or "", entry.lnum or entry.line or 0)
+        
+        -- Skip if we've already seen this exact entry
+        if seen_entries[entry_key] then
             goto continue
         end
+        seen_entries[entry_key] = true
         
         -- Create a proper display string
         local display = entry.path or entry.key or "Unknown"
@@ -98,9 +102,6 @@ function M.create_snacks_picker(opts)
         -- Only add the entry if it has a valid display string and path
         if display ~= "Unknown" and (snack_entry.path or snack_entry.key) then
             table.insert(entries, snack_entry)
-            if snack_entry.path then
-                seen_paths[snack_entry.path] = true
-            end
         end
         
         ::continue::
