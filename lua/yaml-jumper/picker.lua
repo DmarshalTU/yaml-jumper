@@ -78,7 +78,8 @@ function M.create_snacks_picker(opts)
             lnum = entry.lnum or 1,
             text = entry.text or display,
             path = entry.path,
-            value_text = entry.value_text
+            value_text = entry.value_text,
+            key = entry.key
         }
         
         -- Add any additional fields from the original entry
@@ -88,7 +89,10 @@ function M.create_snacks_picker(opts)
             end
         end
         
-        table.insert(entries, snack_entry)
+        -- Only add the entry if it has a valid display string
+        if display ~= "Unknown" then
+            table.insert(entries, snack_entry)
+        end
     end
     
     -- Create the picker using Snacks.picker
