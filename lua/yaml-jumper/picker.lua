@@ -86,26 +86,7 @@ function M.create_snacks_picker(opts)
             value_text = value,
             -- Add Snacks-specific fields
             label = display,
-            description = value or "",
-            preview = function()
-                local preview_bufnr = vim.api.nvim_create_buf(false, true)
-                local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(current_file), 0, -1, false)
-                local start_line = math.max(0, item.line - 5)
-                local end_line = math.min(#lines, item.line + 5)
-                
-                local preview_lines = {}
-                for i = start_line, end_line do
-                    if i == item.line - 1 then
-                        table.insert(preview_lines, "> " .. lines[i])
-                    else
-                        table.insert(preview_lines, "  " .. lines[i])
-                    end
-                end
-                
-                vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, preview_lines)
-                vim.api.nvim_buf_set_option(preview_bufnr, "filetype", "yaml")
-                return preview_bufnr
-            end
+            description = value or ""
         }
         
         table.insert(entries, snack_entry)
@@ -118,12 +99,43 @@ function M.create_snacks_picker(opts)
         prompt = opts.prompt_title,
         items = entries,
         on_select = function(selection)
-            if opts.on_select then
-                opts.on_select(selection)
+            if selection and selection.lnum then
+                -- Jump to the line
+                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+                -- Add to history if the callback exists
+                if opts.on_select then
+                    opts.on_select(selection)
+                end
             end
         end,
         preview = function(entry)
-            return entry.preview()
+            if not entry.filename then return end
+            
+            -- Create a preview buffer
+            local preview_bufnr = vim.api.nvim_create_buf(false, true)
+            
+            -- Get the content around the target line
+            local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(entry.filename), 0, -1, false)
+            local start_line = math.max(0, entry.lnum - 5)
+            local end_line = math.min(#lines, entry.lnum + 5)
+            
+            local preview_lines = {}
+            for i = start_line, end_line do
+                if i == entry.lnum - 1 then
+                    -- Highlight the current line
+                    table.insert(preview_lines, "> " .. lines[i])
+                else
+                    table.insert(preview_lines, "  " .. lines[i])
+                end
+            end
+            
+            -- Set the preview content
+            vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, preview_lines)
+            
+            -- Set filetype for syntax highlighting
+            vim.api.nvim_buf_set_option(preview_bufnr, "filetype", "yaml")
+            
+            return preview_bufnr
         end,
         attach_mappings = function(map)
             if opts.on_attach then
