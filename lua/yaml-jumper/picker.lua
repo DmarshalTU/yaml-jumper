@@ -189,15 +189,22 @@ function M.create_snacks_picker(opts)
             local item = entry.value
             log(string.format("Processing values for entry: %s", vim.inspect(item)))
 
-            -- Get value
-            local value = item.value_text
-            if not value and item.text then
-                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+            -- Get value from the item's text
+            local value = nil
+            if item.text then
+                local line = item.text:gsub("^%s+", "") -- Remove leading whitespace
+                local _, val = line:match("^[^:]+:%s*(.+)$")
                 if val then
-                    value = val:gsub("^%s*(.-)%s*$", "%1")
+                    value = val:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
                 end
             end
 
+            -- If no value found in text, try item.value_text
+            if not value or value == "" then
+                value = item.value_text
+            end
+
+            -- If still no value, return empty table
             if not value or value == "" then
                 log("No value found")
                 return {}
@@ -222,4 +229,5 @@ function M.create_snacks_picker(opts)
     return picker
 end
 
+return M 
 return M 
