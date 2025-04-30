@@ -141,7 +141,19 @@ function M.create_snacks_picker(opts)
             if opts.on_attach then
                 opts.on_attach(nil, map)
             end
-        end
+        end,
+        -- Add Snacks-specific options
+        matcher = {
+            fuzzy = true,
+            smartcase = true,
+            ignorecase = true
+        },
+        sort = {
+            fields = { "ordinal" }
+        },
+        layout = {
+            preview = "main"
+        }
     })
     
     return picker
