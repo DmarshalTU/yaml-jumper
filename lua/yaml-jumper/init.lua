@@ -30,7 +30,112 @@ local config = {
     max_history_items = 20, -- Max number of items to keep in history
     use_smart_parser = true, -- Use the smart YAML parser when available
     debug_performance = false, -- Enable performance logging
-    picker_type = "telescope" -- or "snacks"
+    picker_type = "telescope", -- or "snacks"
+    picker_config = {
+        snacks = {
+            prompt = "YAML Jump: ",
+            layout = {
+                width = 0.8,
+                height = 0.8,
+                cycle = true,
+                preset = function()
+                    return vim.o.columns >= 120 and "default" or "vertical"
+                end,
+            },
+            jump = {
+                jumplist = true,
+                close = true,
+                match = false,
+                reuse_win = true,
+            },
+            matcher = {
+                fuzzy = true,
+                smartcase = true,
+                ignorecase = true,
+                sort_empty = false,
+                match_fn = function(item, query)
+                    if not query or query == "" then return true end
+                    -- First try exact match
+                    if item.path == query then return true end
+                    -- Then try fuzzy match
+                    return item.path:lower():find(query:lower(), 1, true) ~= nil
+                end
+            },
+            sort = {
+                fields = { "score:desc", "#text", "idx" },
+            },
+            win = {
+                input = {
+                    keys = {
+                        ["<CR>"] = { "confirm", mode = { "n", "i" } },
+                        ["<Esc>"] = "cancel",
+                        ["<C-e>"] = { "edit", mode = { "n", "i" } },
+                    },
+                },
+            },
+            format = function(item)
+                local display = {}
+                table.insert(display, { item.path, "Keyword" })
+                if item.value_text and item.value_text ~= "" then
+                    table.insert(display, { " = ", "Normal" })
+                    table.insert(display, { item.value_text, "String" })
+                end
+                return display
+            end,
+            preview = function(entry)
+                if not entry or not entry.value then return end
+                local item = entry.value
+                local filename = item.filename
+                if not filename then return end
+
+                local start_line = math.max(1, item.lnum - 5)
+                local end_line = item.lnum + 5
+                local lines = vim.fn.readfile(filename, "", end_line)
+                local context = {}
+                
+                for i = start_line, math.min(end_line, #lines) do
+                    if i == item.lnum then
+                        table.insert(context, "> " .. lines[i])
+                    else
+                        table.insert(context, "  " .. lines[i])
+                    end
+                end
+
+                return {
+                    filetype = "yaml",
+                    contents = context,
+                    syntax = "yaml",
+                    highlight_line = item.lnum - start_line + 1,
+                }
+            end,
+            values = function(entry)
+                if not entry or not entry.value then return {} end
+                local item = entry.value
+                
+                local value = item.value_text
+                if not value then
+                    local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+                    if val then
+                        value = val:gsub("^%s*(.-)%s*$", "%1")
+                    end
+                end
+                
+                local path_parts = vim.split(item.path, ".", { plain = true })
+                local parent_path = table.concat(path_parts, ".", 1, #path_parts - 1)
+                
+                local formatted_value = {}
+                if parent_path ~= "" then
+                    table.insert(formatted_value, parent_path .. ":")
+                end
+                table.insert(formatted_value, "  " .. path_parts[#path_parts] .. ": " .. (value or ""))
+                
+                if value and value ~= "" then
+                    return formatted_value
+                end
+                return {}
+            end
+        }
+    }
 }
 
 -- History storage for YAML jumps
