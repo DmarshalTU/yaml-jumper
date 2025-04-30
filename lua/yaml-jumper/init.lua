@@ -1345,40 +1345,35 @@ function M.search_paths_in_project()
     })
     
     -- Create finder options
-    local opts = {
+    local picker_opts = {
         prompt_title = "YAML Paths in Project",
-        finder = require("telescope.finders").new_table {
-            results = all_paths,
-            entry_maker = function(entry)
-                return {
-                    value = entry,
-                    display = entry.relative_path .. ":" .. entry.path,
-                    ordinal = entry.file_name .. " " .. entry.path,
-                    filename = entry.file_path,
-                    lnum = entry.line,
-                    text = entry.text
-                }
-            end
-        },
+        results = all_paths,
+        entry_maker = function(entry)
+            return {
+                value = entry,
+                display = entry.relative_path .. ":" .. entry.path,
+                ordinal = entry.file_name .. " " .. entry.path,
+                filename = entry.file_path,
+                lnum = entry.line,
+                text = entry.text
+            }
+        end,
         sorter = require("telescope.config").values.generic_sorter({}),
         previewer = previewer,
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                -- Open the file if it's not the current buffer
-                if vim.fn.expand("%:p") ~= selection.filename then
-                    vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
-                end
-                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
-            end)
-            return true
+        on_select = function(selection)
+            if vim.fn.expand("%:p") ~= selection.filename then
+                vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
+            end
+            vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+        end,
+        on_attach = function(prompt_bufnr, map)
+            -- Add edit action if you want
         end
     }
     
     -- Open telescope
-    require("telescope.pickers").new(opts):find()
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
+    picker:find()
 end
 
 -- Search for YAML values across multiple files
@@ -1470,36 +1465,29 @@ function M.search_values_in_project()
     })
     
     -- Create finder options
-    local opts = {
+    local picker_opts = {
         prompt_title = "YAML Values in Project",
-        finder = require("telescope.finders").new_table {
-            results = all_values,
-            entry_maker = function(entry)
-                return {
-                    value = entry,
-                    display = entry.relative_path .. ": " .. entry.path .. " = " .. entry.value,
-                    ordinal = entry.file_name .. " " .. entry.path .. " " .. entry.value,
-                    filename = entry.file_path,
-                    lnum = entry.line,
-                    text = entry.text,
-                    value_text = entry.value
-                }
-            end
-        },
+        results = all_values,
+        entry_maker = function(entry)
+            return {
+                value = entry,
+                display = entry.relative_path .. ": " .. entry.path .. " = " .. entry.value,
+                ordinal = entry.file_name .. " " .. entry.path .. " " .. entry.value,
+                filename = entry.file_path,
+                lnum = entry.line,
+                text = entry.text,
+                value_text = entry.value
+            }
+        end,
         sorter = require("telescope.config").values.generic_sorter({}),
         previewer = previewer,
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                -- Open the file if it's not the current buffer
-                if vim.fn.expand("%:p") ~= selection.filename then
-                    vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
-                end
-                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
-            end)
-            
+        on_select = function(selection)
+            if vim.fn.expand("%:p") ~= selection.filename then
+                vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
+            end
+            vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+        end,
+        on_attach = function(prompt_bufnr, map)
             -- Add edit action
             M.add_edit_action(prompt_bufnr, map)
             
@@ -1508,7 +1496,8 @@ function M.search_values_in_project()
     }
     
     -- Open telescope
-    require("telescope.pickers").new(opts):find()
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
+    picker:find()
 end
 
 -- Jump to history of recent YAML paths
@@ -1734,4 +1723,5 @@ function M.setup(opts)
     })
 end
 
+M._config = config
 return M
