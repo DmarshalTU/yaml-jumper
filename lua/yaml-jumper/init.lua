@@ -1282,6 +1282,7 @@ function M.jump_to_value()
                     line = lnum,
                     filename = filename,
                     buf = vim.api.nvim_get_current_buf(),
+                    value_text = entry.value,
                 },
                 display = path_value,
                 ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
