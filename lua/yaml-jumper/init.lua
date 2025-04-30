@@ -83,28 +83,7 @@ local config = {
                 return display
             end,
             preview = function(item)
-                local lines
-                if item.file and type(item.file) == "string" and vim.fn.filereadable(item.file) == 1 then
-                    lines = vim.fn.readfile(item.file)
-                else
-                    -- fallback: get lines from current buffer
-                    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-                end
-                local lnum = item.lnum or 1
-                local start_line = math.max(1, lnum - 5)
-                local end_line = math.min(#lines, lnum + 5)
-                local context = {}
-                for i = start_line, end_line do
-                    if i == lnum then
-                        table.insert(context, "> " .. (lines[i] or ""))
-                    else
-                        table.insert(context, "  " .. (lines[i] or ""))
-                    end
-                end
-                return {
-                    text = table.concat(context, "\n"),
-                    ft = "yaml"
-                }
+                return { text = "Hello from preview!", ft = "yaml" }
             end,
             values = function(entry)
                 if not entry or not entry.value then return {} end
