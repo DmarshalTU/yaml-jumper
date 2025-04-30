@@ -87,7 +87,8 @@ function M.create_snacks_picker(opts)
             text = entry.text or display,
             path = entry.path,
             value_text = entry.value_text or entry.value,
-            key = entry.key
+            key = entry.key,
+            is_history = entry.is_history
         }
         
         -- Only add the entry if it has a valid display string and path
@@ -140,44 +141,7 @@ function M.create_snacks_picker(opts)
             if opts.on_attach then
                 opts.on_attach(nil, map)
             end
-        end,
-        -- Add snacks picker specific options
-        matcher = {
-            fuzzy = true,
-            smartcase = true,
-            ignorecase = true,
-            sort_empty = false,
-            filename_bonus = true,
-            file_pos = true,
-            cwd_bonus = false,
-            frecency = false,
-            history_bonus = false
-        },
-        sort = {
-            fields = { "score:desc", "#text", "idx" }
-        },
-        layout = {
-            preset = "default",
-            preview = "main"
-        },
-        -- Add Snacks-specific options to avoid conflicts
-        picker = {
-            enabled = true,
-            preview = true,
-            preview_lines = 10,
-            preview_border = "rounded",
-            preview_highlight = "Normal",
-            preview_winblend = 0,
-            preview_winhighlight = "Normal:NormalFloat",
-            preview_winopts = {
-                relative = "editor",
-                style = "minimal",
-                border = "rounded",
-                title = "YAML Preview",
-                title_pos = "center",
-                zindex = 50
-            }
-        }
+        end
     })
     
     return picker
