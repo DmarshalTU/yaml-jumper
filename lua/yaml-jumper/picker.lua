@@ -90,7 +90,7 @@ function M.create_snacks_picker(opts)
         
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
-            local value = extract_value(item.text)
+            local value = item.value or extract_value(item.text)
             
             -- Log extracted value
             log("Path: " .. item.path .. ", Value: " .. value)
@@ -98,7 +98,11 @@ function M.create_snacks_picker(opts)
             local entry = {
                 value = item,
                 display = function()
-                    return string.format("%-40s = %s", item.path, value)
+                    if value and value ~= "" then
+                        return string.format("%-40s = %s", item.path, value)
+                    else
+                        return item.path
+                    end
                 end,
                 text = item.text,
                 lnum = item.line or 1,
@@ -170,17 +174,20 @@ function M.create_snacks_picker(opts)
             
             if not selection or not selection.value then return end
             local item = selection.value
-            local filename = item.filename
-            if not filename then return end
-
+            
             -- Open the file if needed
-            if vim.fn.expand("%:p") ~= filename then
-                vim.cmd("edit " .. filename)
+            if vim.fn.expand("%:p") ~= item.filename then
+                vim.cmd("edit " .. item.filename)
             end
 
-            -- Jump to the line
+            -- Jump to the line and center it
             vim.api.nvim_win_set_cursor(0, {item.line, 0})
-            vim.cmd("normal! zz") -- Center the line
+            vim.cmd("normal! zz")
+            
+            -- Add to history if on_select callback exists
+            if opts.on_select then
+                opts.on_select(selection)
+            end
         end,
     })
 
