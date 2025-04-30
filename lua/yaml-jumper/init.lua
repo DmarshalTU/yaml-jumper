@@ -1079,8 +1079,6 @@ function M.jump_to_path()
         entry_maker = function(entry)
             local display = entry.path
             local is_history = false
-            
-            -- Check if this path is in history
             for _, h in ipairs(history_items) do
                 if h == entry.path then
                     is_history = true
@@ -1088,17 +1086,26 @@ function M.jump_to_path()
                     break
                 end
             end
-            
+            local filename = vim.api.nvim_buf_get_name(0)
+            local lnum = entry.line
+            local text = entry.text or (lnum and vim.api.nvim_buf_get_lines(0, lnum-1, lnum, false)[1]) or ""
             return {
-                value = entry,
+                value = {
+                    path = entry.path,
+                    text = text,
+                    lnum = lnum,
+                    line = lnum,
+                    filename = filename,
+                    buf = vim.api.nvim_get_current_buf(),
+                },
                 display = display,
-                ordinal = (is_history and "0" or "1") .. entry.path, -- Sort history first
+                ordinal = (is_history and "0" or "1") .. entry.path,
                 path = entry.path,
-                lnum = entry.line,         -- snacks expects this
-                line = entry.line,         -- snacks expects this too!
-                text = entry.text,
+                lnum = lnum,
+                line = lnum,
+                text = text,
                 is_history = is_history,
-                filename = vim.api.nvim_buf_get_name(0),
+                filename = filename,
             }
         end,
         previewer = previewer,
@@ -1257,8 +1264,6 @@ function M.jump_to_value()
         entry_maker = function(entry)
             local path_value = entry.path .. ": " .. entry.value
             local is_history = false
-            
-            -- Check if this value is in history
             for _, h in ipairs(history_items) do
                 if h == path_value then
                     is_history = true
@@ -1266,18 +1271,27 @@ function M.jump_to_value()
                     break
                 end
             end
-            
+            local filename = vim.api.nvim_buf_get_name(0)
+            local lnum = entry.line
+            local text = entry.text or (lnum and vim.api.nvim_buf_get_lines(0, lnum-1, lnum, false)[1]) or ""
             return {
-                value = entry,
+                value = {
+                    path = entry.path,
+                    text = text,
+                    lnum = lnum,
+                    line = lnum,
+                    filename = filename,
+                    buf = vim.api.nvim_get_current_buf(),
+                },
                 display = path_value,
                 ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
-                lnum = entry.line,         -- snacks expects this
-                line = entry.line,         -- snacks expects this too!
-                text = entry.text,
+                lnum = lnum,
+                line = lnum,
+                text = text,
                 path = entry.path,
                 value_text = entry.value,
                 is_history = is_history,
-                filename = vim.api.nvim_buf_get_name(0),
+                filename = filename,
             }
         end,
         previewer = previewer,
