@@ -1029,6 +1029,8 @@ function M.jump_to_path()
     local picker_opts = {
         prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
         results = vim.tbl_map(function(entry)
+            local value = entry.text:match("^.-:%s*(.+)$")
+            if value then value = value:gsub("^%s*(.-)%s*$", "%1") end
             return {
                 buf = bufnr,
                 lnum = entry.line,
@@ -1036,6 +1038,7 @@ function M.jump_to_path()
                 path = entry.path,
                 filename = filename,
                 file = filename,
+                value_text = value or "",
             }
         end, paths),
         entry_maker = function(entry)
@@ -1058,6 +1061,7 @@ function M.jump_to_path()
                 is_history = is_history,
                 filename = entry.filename,
                 file = entry.file,
+                value_text = entry.value_text,
             }
         end,
         on_select = function(selection)
@@ -1069,9 +1073,15 @@ function M.jump_to_path()
         end
     }
 
-    -- Snacks expects these for preview/jump!
     if config.picker_type == "snacks" then
-        picker_opts.format = "file"
+        picker_opts.format = function(item)
+            local display = { { item.path, "Keyword" } }
+            if item.value_text and item.value_text ~= "" then
+                table.insert(display, { " = ", "Normal" })
+                table.insert(display, { item.value_text, "String" })
+            end
+            return display
+        end
         picker_opts.preview = "preview"
     end
 
