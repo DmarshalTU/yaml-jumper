@@ -1096,7 +1096,8 @@ function M.jump_to_path()
                 path = entry.path,
                 lnum = entry.line,
                 text = entry.text,
-                is_history = is_history
+                is_history = is_history,
+                filename = vim.api.nvim_buf_get_name(0), -- <-- ADDED for snacks compatibility
             }
         end,
         previewer = previewer,
@@ -1273,7 +1274,8 @@ function M.jump_to_value()
                 text = entry.text,
                 path = entry.path,
                 value_text = entry.value,
-                is_history = is_history
+                is_history = is_history,
+                filename = vim.api.nvim_buf_get_name(0), -- <-- ADDED for snacks compatibility
             }
         end,
         previewer = previewer,
