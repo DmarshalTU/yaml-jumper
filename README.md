@@ -17,7 +17,7 @@ A Neovim plugin for quickly navigating YAML files using Telescope.
 
 ## Requirements
 
-- [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
+- [Telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) or [Snacks.nvim](https://github.com/folke/snacks.nvim)
 - [Plenary.nvim](https://github.com/nvim-lua/plenary.nvim) (for multi-file search)
 - [lyaml](https://github.com/gvvaughan/lyaml) (optional, for improved YAML parsing)
 
@@ -95,6 +95,9 @@ require('yaml-jumper').setup({
     
     -- Parser settings
     use_smart_parser = true,           -- Use the enhanced YAML parser when available
+    
+    -- Picker settings
+    picker_type = "telescope",         -- Choose between "telescope" or "snacks"
     
     -- Debug settings
     debug_performance = false,         -- Enable performance profiling and logging
