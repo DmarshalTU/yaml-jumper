@@ -1010,7 +1010,7 @@ function M.jump_to_path()
     }
     
     -- Create and show the picker
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts)
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
     picker:find()
 end
 
@@ -1187,7 +1187,7 @@ function M.jump_to_value()
     }
     
     -- Create and show the picker
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts)
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
     picker:find()
 end
 
