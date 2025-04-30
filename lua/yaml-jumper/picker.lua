@@ -66,7 +66,13 @@ function M.create_snacks_picker(opts)
         seen_entries[entry_key] = true
         
         -- Create a proper display string
-        local display = entry.path or entry.key or "Unknown"
+        local display = ""
+        if entry.is_history then
+            display = "⭐ " .. (entry.path or entry.key or "Unknown")
+        else
+            display = entry.path or entry.key or "Unknown"
+        end
+        
         if entry.value_text then
             display = display .. ": " .. entry.value_text
         elseif entry.text then
