@@ -609,6 +609,7 @@ function M.get_yaml_values(lines, file_path)
     local values = {}
     local current_indent = 0
     local current_keys = {}
+    local seen_paths = {} -- Track seen paths to avoid duplicates
 
     for i, line in ipairs(lines) do
         -- Skip empty lines and comments
@@ -631,33 +632,37 @@ function M.get_yaml_values(lines, file_path)
 
         -- Extract the key and value from the current line
         local key, value = line:match("^%s*([^:]+):%s*(.*)$")
-        if key and value and value ~= "" then
+        if key then
             key = key:gsub("^%s*(.-)%s*$", "%1")
-            value = value:gsub("^%s*(.-)%s*$", "%1")
             
             -- Create the path
             table.insert(current_keys, key)
             current_indent = indent
             local path = table.concat(current_keys, ".")
             
-            -- Add the value to our list
-            table.insert(values, {
-                line = i,
-                key = key,
-                path = path,
-                value = value,
-                text = line:gsub("^%s+", "")
-            })
+            -- Only add if we haven't seen this path before
+            if not seen_paths[path] then
+                seen_paths[path] = true
+                
+                -- If there's a value, add it to our list
+                if value and value ~= "" then
+                    value = value:gsub("^%s*(.-)%s*$", "%1")
+                    table.insert(values, {
+                        line = i,
+                        key = key,
+                        path = path,
+                        value = value,
+                        text = line:gsub("^%s+", "")
+                    })
+                end
+            end
             
-            -- Remove the key since we've captured its value
-            table.remove(current_keys)
-        else
-            -- If there's a key without a value on this line, it might be a parent node
-            key = line:match("^%s*([^:]+):")
-            if key then
-                key = key:gsub("^%s*(.-)%s*$", "%1")
-                table.insert(current_keys, key)
-                current_indent = indent
+            -- If there's no value on this line, it might be a parent node
+            if not value or value == "" then
+                -- Keep the key in current_keys for nested paths
+            else
+                -- Remove the key since we've captured its value
+                table.remove(current_keys)
             end
         end
 

@@ -88,7 +88,7 @@ function M.create_snacks_picker(opts)
             lnum = entry.lnum or entry.line or 1,
             text = entry.text or display,
             path = entry.path,
-            value_text = entry.value_text,
+            value_text = entry.value_text or entry.value,
             key = entry.key
         }
         
@@ -130,6 +130,7 @@ function M.create_snacks_picker(opts)
             local preview_lines = {}
             for i = start_line, end_line do
                 if i == entry.lnum - 1 then
+                    -- Highlight the current line
                     table.insert(preview_lines, "> " .. lines[i])
                 else
                     table.insert(preview_lines, "  " .. lines[i])
