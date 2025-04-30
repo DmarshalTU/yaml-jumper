@@ -532,42 +532,34 @@ function M.get_yaml_paths(lines, file_path)
             
             -- Extract array item key if it exists (e.g., "- name: value")
             local item_key = line:match("^%s*%-%s*([^:]+):")
+            local array_item_path
+            
             if item_key then
                 item_key = item_key:gsub("^%s*(.-)%s*$", "%1")
-                
-                local array_item_path
                 if array_path ~= "" then
                     array_item_path = array_path .. "." .. index .. "." .. item_key
                 else
                     array_item_path = index .. "." .. item_key
                 end
-                
-                table.insert(paths, {
-                    line = i,
-                    key = item_key,
-                    text = line:gsub("^%s+", ""),
-                    path = array_item_path,
-                    isArray = true,
-                    arrayIndex = index
-                })
             else
                 -- Simple array item without a key
-                local array_item_path
                 if array_path ~= "" then
                     array_item_path = array_path .. "." .. index
                 else
                     array_item_path = tostring(index)
                 end
-                
-                table.insert(paths, {
-                    line = i,
-                    key = "[" .. index .. "]",
-                    text = line:gsub("^%s+", ""),
-                    path = array_item_path,
-                    isArray = true,
-                    arrayIndex = index
-                })
+                item_key = "[" .. index .. "]"
             end
+            
+            -- Add the array item path only once
+            table.insert(paths, {
+                line = i,
+                key = item_key,
+                text = line:gsub("^%s+", ""),
+                path = array_item_path,
+                isArray = true,
+                arrayIndex = index
+            })
         else
             -- Extract the key from the current line (regular key, not array item)
             local key = line:match("^%s*([^:]+):")
