@@ -45,35 +45,47 @@ end
 
 -- Create a snacks picker
 function M.create_snacks_picker(opts)
-    local Snacks = require("snacks")
-    
-    -- Helper function to extract value from YAML text
-    local function extract_value(text)
-        if not text then return nil end
-        local _, value = text:match("^[^:]+:%s*(.+)$")
-        return value
-    end
-    
-    -- Create entries for snacks
     local entries = {}
     local seen_paths = {}
-    
+    local current_file = vim.api.nvim_buf_get_name(0)
+    local current_buf = vim.api.nvim_get_current_buf()
+
     for _, item in ipairs(opts.results) do
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
-            local display = string.format("%-40s %s", item.path, item.value_text or item.text or "")
+            local display = string.format("%-40s %s", item.path, item.value or item.value_text or "")
             table.insert(entries, {
                 value = item,
                 display = display,
-                ordinal = item.path .. " " .. (item.value_text or item.text or ""),
-                filename = item.filename,
+                ordinal = item.path .. " " .. (item.value or item.value_text or ""),
+                buf = current_buf,
+                file = current_file,
                 lnum = item.line or 1,
                 text = display,
+                preview = function(entry, state)
+                    local bufnr = state.bufnr
+                    local lines = vim.api.nvim_buf_get_lines(current_buf, 0, -1, false)
+                    local lnum = entry.lnum
+                    local start_line = math.max(0, lnum - 5)
+                    local end_line = math.min(#lines, lnum + 5)
+                    local preview_lines = {}
+                    
+                    for i = start_line, end_line do
+                        if i == lnum - 1 then
+                            table.insert(preview_lines, "> " .. lines[i])
+                        else
+                            table.insert(preview_lines, "  " .. lines[i])
+                        end
+                    end
+                    
+                    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, preview_lines)
+                    vim.api.nvim_buf_set_option(bufnr, "filetype", "yaml")
+                end
             })
         end
     end
-    
-    return Snacks.picker({
+
+    return require("snacks").picker({
         items = entries,
         title = " YAML Paths ",
         title_pos = "center",
@@ -87,11 +99,6 @@ function M.create_snacks_picker(opts)
         },
         on_select = function(selection)
             if selection and selection.value and selection.value.line then
-                local bufnr = vim.fn.bufnr(selection.value.filename)
-                if bufnr == -1 then
-                    bufnr = vim.fn.bufadd(selection.value.filename)
-                end
-                vim.api.nvim_set_current_buf(bufnr)
                 vim.api.nvim_win_set_cursor(0, {selection.value.line, 0})
             end
         end,
