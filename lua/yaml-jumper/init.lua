@@ -1706,6 +1706,7 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("YamlJumpValueProject", function() M.search_values_in_project() end, {})
     vim.api.nvim_create_user_command("YamlJumpClearCache", function() utils.clear_cache() end, {})
     vim.api.nvim_create_user_command("YamlJumpHistory", function() M.jump_to_history() end, {})
+    vim.api.nvim_create_user_command("YamlJumpDebugSnacks", function() require("yaml-jumper").debug_snacks_picker() end, {})
     
     -- Set up autocommands for cache clearing
     vim.api.nvim_create_autocmd("BufWritePost", {
@@ -1716,6 +1717,54 @@ function M.setup(opts)
                 utils.clear_cache(file_path)
             end
         end
+    })
+end
+
+function M.debug_snacks_picker()
+    local filename = vim.api.nvim_buf_get_name(0)
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local items = {}
+    for i, line in ipairs(lines) do
+        local key = line:match("^%s*([^:]+):")
+        local value = line:match("^.-:%s*(.+)$")
+        if key then
+            table.insert(items, {
+                file = filename,
+                lnum = i,
+                text = line,
+                path = key,
+                value_text = value or "",
+            })
+        end
+    end
+    require("snacks").picker({
+        items = items,
+        format = function(item)
+            local display = { { item.path, "Keyword" } }
+            if item.value_text and item.value_text ~= "" then
+                table.insert(display, { " = ", "Normal" })
+                table.insert(display, { item.value_text, "String" })
+            end
+            return display
+        end,
+        preview = function(item)
+            local lines = vim.fn.readfile(item.file)
+            local lnum = item.lnum or 1
+            local start_line = math.max(1, lnum - 5)
+            local end_line = math.min(#lines, lnum + 5)
+            local context = {}
+            for i = start_line, end_line do
+                if i == lnum then
+                    table.insert(context, "> " .. (lines[i] or ""))
+                else
+                    table.insert(context, "  " .. (lines[i] or ""))
+                end
+            end
+            return {
+                text = table.concat(context, "\n"),
+                ft = "yaml"
+            }
+        end,
     })
 end
 
