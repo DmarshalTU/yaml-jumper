@@ -81,7 +81,7 @@ function M.create_snacks_picker(opts)
         local entry = {
             value = item,
             text = item.text,
-            lnum = item.line,
+            lnum = item.line or item.lnum, -- Handle both line and lnum
             col = 1,
             buf = current_buf,
             file = current_file,
@@ -154,7 +154,9 @@ function M.create_snacks_picker(opts)
             end
 
             -- Jump to the beginning of the line
-            vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
+            if item.lnum then
+                vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
+            end
             
             -- Add to history if on_select callback exists
             if opts.on_select then
