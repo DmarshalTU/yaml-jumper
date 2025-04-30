@@ -2,6 +2,7 @@
 luac.out
 docs
 log
+combined.*
 # luarocks build files
 *.src.rock
 *.zip

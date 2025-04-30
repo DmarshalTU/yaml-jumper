@@ -1019,66 +1019,17 @@ end
 
 -- Jump to a YAML path using telescope
 function M.jump_to_path()
-    -- Get lines of current buffer
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
-    local filename = vim.api.nvim_buf_get_name(bufnr)
-
-    -- Get all paths
     local paths = M.get_yaml_paths(lines)
-
-    -- Add history items to the results
     local history_items = utils.get_history("paths")
     local has_history = #history_items > 0
 
-    -- Preview function that shows the YAML value at the selected path
-    local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "YAML Value Preview",
-        define_preview = function(self, entry, status)
-            local content = {}
-            local lnum = entry.lnum
-
-            -- Add selected line
-            table.insert(content, lines[lnum])
-
-            -- Try to capture the value and any nested content
-            local indent_level = lines[lnum]:match("^(%s*)"):len()
-            local max_lines = config.max_preview_lines
-            local line_count = 0
-
-            -- Add lines with deeper indentation (the value and any nested content)
-            for i = lnum + 1, #lines do
-                if line_count >= max_lines then
-                    table.insert(content, "... (more lines not shown)")
-                    break
-                end
-
-                local line = lines[i]
-                local line_indent = line:match("^(%s*)"):len()
-
-                -- Stop when we reach a line with same or less indentation
-                if line_indent <= indent_level then
-                    break
-                end
-
-                table.insert(content, line)
-                line_count = line_count + 1
-            end
-
-            -- Add the content to the preview buffer
-            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
-
-            -- Syntax highlighting for YAML
-            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
-        end
-    })
-
-    -- Create picker options
     local picker_opts = {
         prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
         results = vim.tbl_map(function(entry)
             return {
-                filename = filename,
+                buf = bufnr,
                 lnum = entry.line,
                 text = entry.text,
                 path = entry.path,
@@ -1097,14 +1048,14 @@ function M.jump_to_path()
             return {
                 display = display,
                 ordinal = (is_history and "0" or "1") .. entry.path,
-                filename = entry.filename,
+                buf = entry.buf,
                 lnum = entry.lnum,
                 text = entry.text,
                 path = entry.path,
                 is_history = is_history,
             }
         end,
-        previewer = previewer,
+        previewer = nil, -- snacks will use its own preview logic if buf/lnum/text are present
         on_select = function(selection)
             pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
             utils.add_to_history(selection.path, "paths")
