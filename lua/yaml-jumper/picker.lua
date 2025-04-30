@@ -155,12 +155,19 @@ function M.create_snacks_picker(opts)
             end
         end,
         format = function(item)
-            -- Only show the value if it exists and isn't empty
-            local display = item.path
+            -- Create a more visible display format
+            local display = {}
+            
+            -- Add the path in a visible color
+            table.insert(display, { item.path, "Keyword" })
+            
+            -- Add the value if it exists
             if item.value_text and item.value_text ~= "" then
-                display = string.format("%s = %s", item.path, item.value_text)
+                table.insert(display, { " = ", "Normal" })
+                table.insert(display, { item.value_text, "String" })
             end
-            return { { display, "Comment" } }
+            
+            return display
         end,
         preview = function(entry)
             if not entry or not entry.value then return end
