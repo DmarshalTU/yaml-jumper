@@ -78,13 +78,6 @@ function M.create_snacks_picker(opts)
 
         local entry = {
             value = item,
-            display = function()
-                if value and value ~= "" then
-                    return string.format("%s = %s", item.path, value)
-                else
-                    return item.path
-                end
-            end,
             text = item.text,
             lnum = item.line,
             col = 1,
@@ -95,16 +88,17 @@ function M.create_snacks_picker(opts)
             value_text = value,
             label = item.path,
             description = value,
-            jump = {
-                line = item.line,
-                col = 1
+            preview = {
+                text = item.text,
+                ft = "yaml",
+                loc = true
             }
         }
         
         table.insert(entries, entry)
     end
 
-    -- Create the picker with improved configuration
+    -- Create the picker with proper configuration
     local picker = require("snacks").picker({
         items = entries,
         prompt = "YAML Jump: ",
@@ -122,46 +116,6 @@ function M.create_snacks_picker(opts)
             match = false,
             reuse_win = true,
         },
-        preview = function(entry)
-            if not entry or not entry.value then return end
-            local item = entry.value
-            local filename = item.filename
-            if not filename then return end
-
-            local start_line = math.max(1, item.line - 5)
-            local end_line = item.line + 5
-            local lines = vim.fn.readfile(filename, "", end_line)
-            local context = {}
-            
-            for i = start_line, math.min(end_line, #lines) do
-                table.insert(context, lines[i])
-            end
-
-            return {
-                filetype = "yaml",
-                contents = context,
-                syntax = "yaml",
-                highlight_line = item.line - start_line + 1,
-            }
-        end,
-        on_select = function(selection)
-            if not selection or not selection.value then return end
-            local item = selection.value
-            
-            -- Open the file if needed
-            if vim.fn.expand("%:p") ~= item.filename then
-                vim.cmd("edit " .. item.filename)
-            end
-
-            -- Jump to the line and center it
-            vim.api.nvim_win_set_cursor(0, {item.line, 0})
-            vim.cmd("normal! zz")
-            
-            -- Add to history if on_select callback exists
-            if opts.on_select then
-                opts.on_select(selection)
-            end
-        end,
         matcher = {
             fuzzy = true,
             smartcase = true,
@@ -180,6 +134,31 @@ function M.create_snacks_picker(opts)
                 },
             },
         },
+        on_select = function(selection)
+            if not selection or not selection.value then return end
+            local item = selection.value
+            
+            -- Open the file if needed
+            if vim.fn.expand("%:p") ~= item.filename then
+                vim.cmd("edit " .. item.filename)
+            end
+
+            -- Jump to the line and center it
+            vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
+            vim.cmd("normal! zz")
+            
+            -- Add to history if on_select callback exists
+            if opts.on_select then
+                opts.on_select(selection)
+            end
+        end,
+        format = function(item)
+            local display = item.path
+            if item.value_text and item.value_text ~= "" then
+                display = string.format("%s = %s", item.path, item.value_text)
+            end
+            return { { display, "Comment" } }
+        end
     })
 
     return picker
