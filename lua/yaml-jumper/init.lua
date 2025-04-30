@@ -1060,7 +1060,6 @@ function M.jump_to_path()
                 file = entry.file,
             }
         end,
-        previewer = nil,
         on_select = function(selection)
             pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
             utils.add_to_history(selection.path, "paths")
@@ -1208,7 +1207,6 @@ function M.jump_to_value()
                 file = entry.file,
             }
         end,
-        previewer = nil,
         on_select = function(selection)
             pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
             utils.add_to_history(selection.path .. ": " .. (selection.value_text or ""), "values")
