@@ -190,10 +190,19 @@ function M.create_snacks_picker(opts)
             -- Add the path in a visible color
             table.insert(display, { item.path, "Keyword" })
             
+            -- Extract value from text if not already available
+            local value = item.value_text
+            if not value then
+                local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+                if val then
+                    value = val:gsub("^%s*(.-)%s*$", "%1")
+                end
+            end
+            
             -- Add the value if it exists
-            if item.value_text and item.value_text ~= "" then
+            if value and value ~= "" then
                 table.insert(display, { " = ", "Normal" })
-                table.insert(display, { item.value_text, "String" })
+                table.insert(display, { value, "String" })
             end
             
             return display
