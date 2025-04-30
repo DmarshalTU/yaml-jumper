@@ -29,7 +29,8 @@ local config = {
     depth_limit = 10, -- Max directory scan depth
     max_history_items = 20, -- Max number of items to keep in history
     use_smart_parser = true, -- Use the smart YAML parser when available
-    debug_performance = false -- Enable performance logging
+    debug_performance = false, -- Enable performance logging
+    picker_type = "telescope" -- or "snacks"
 }
 
 -- History storage for YAML jumps
@@ -916,13 +917,6 @@ end
 
 -- Jump to a YAML path using telescope
 function M.jump_to_path()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-        return
-    end
-    
     -- Get lines of current buffer
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
@@ -976,57 +970,48 @@ function M.jump_to_path()
         end
     })
     
-    -- Create finder options
-    local opts = {
+    -- Create picker options
+    local picker_opts = {
         prompt_title = has_history and "YAML Path (Recent First)" or "YAML Path",
-        finder = require("telescope.finders").new_table {
-            results = paths,
-            entry_maker = function(entry)
-                local display = entry.path
-                local is_history = false
-                
-                -- Check if this path is in history
-                for _, h in ipairs(history_items) do
-                    if h == entry.path then
-                        is_history = true
-                        display = "⭐ " .. display
-                        break
-                    end
-                end
-                
-                return {
-                    value = entry,
-                    display = display,
-                    ordinal = (is_history and "0" or "1") .. entry.path, -- Sort history first
-                    path = entry.path,
-                    lnum = entry.line,
-                    text = entry.text,
-                    is_history = is_history
-                }
-            end
-        },
-        sorter = require("telescope.config").values.generic_sorter({}),
-        previewer = previewer,
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
-                
-                -- Add to history
-                utils.add_to_history(selection.path, "paths")
-            end)
+        results = paths,
+        entry_maker = function(entry)
+            local display = entry.path
+            local is_history = false
             
+            -- Check if this path is in history
+            for _, h in ipairs(history_items) do
+                if h == entry.path then
+                    is_history = true
+                    display = "⭐ " .. display
+                    break
+                end
+            end
+            
+            return {
+                value = entry,
+                display = display,
+                ordinal = (is_history and "0" or "1") .. entry.path, -- Sort history first
+                path = entry.path,
+                lnum = entry.line,
+                text = entry.text,
+                is_history = is_history
+            }
+        end,
+        previewer = previewer,
+        on_select = function(selection)
+            pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
+            -- Add to history
+            utils.add_to_history(selection.path, "paths")
+        end,
+        on_attach = function(prompt_bufnr, map)
             -- Add edit action
             M.add_edit_action(prompt_bufnr, map)
-            
-            return true
         end
     }
     
-    -- Open telescope
-    require("telescope.pickers").new(opts):find()
+    -- Create and show the picker
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts)
+    picker:find()
 end
 
 -- Jump to a key prefix using telescope
@@ -1121,13 +1106,6 @@ end
 
 -- Jump to a YAML value using telescope
 function M.jump_to_value()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-        return
-    end
-    
     -- Get lines of current buffer
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
@@ -1168,58 +1146,49 @@ function M.jump_to_value()
         end
     })
     
-    -- Create finder options
-    local opts = {
+    -- Create picker options
+    local picker_opts = {
         prompt_title = has_history and "YAML Value Search (Recent First)" or "YAML Value Search",
-        finder = require("telescope.finders").new_table {
-            results = values,
-            entry_maker = function(entry)
-                local path_value = entry.path .. ": " .. entry.value
-                local is_history = false
-                
-                -- Check if this value is in history
-                for _, h in ipairs(history_items) do
-                    if h == path_value then
-                        is_history = true
-                        path_value = "⭐ " .. path_value
-                        break
-                    end
-                end
-                
-                return {
-                    value = entry,
-                    display = path_value,
-                    ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
-                    lnum = entry.line,
-                    text = entry.text,
-                    path = entry.path,
-                    value_text = entry.value,
-                    is_history = is_history
-                }
-            end
-        },
-        sorter = require("telescope.config").values.generic_sorter({}),
-        previewer = previewer,
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
-                
-                -- Add to history
-                utils.add_to_history(selection.path .. ": " .. selection.value_text, "values")
-            end)
+        results = values,
+        entry_maker = function(entry)
+            local path_value = entry.path .. ": " .. entry.value
+            local is_history = false
             
+            -- Check if this value is in history
+            for _, h in ipairs(history_items) do
+                if h == path_value then
+                    is_history = true
+                    path_value = "⭐ " .. path_value
+                    break
+                end
+            end
+            
+            return {
+                value = entry,
+                display = path_value,
+                ordinal = (is_history and "0" or "1") .. entry.path .. " " .. entry.value,
+                lnum = entry.line,
+                text = entry.text,
+                path = entry.path,
+                value_text = entry.value,
+                is_history = is_history
+            }
+        end,
+        previewer = previewer,
+        on_select = function(selection)
+            pcall(vim.api.nvim_win_set_cursor, 0, {selection.lnum, 0})
+            -- Add to history
+            utils.add_to_history(selection.path .. ": " .. selection.value_text, "values")
+        end,
+        on_attach = function(prompt_bufnr, map)
             -- Add edit action
             M.add_edit_action(prompt_bufnr, map)
-            
-            return true
         end
     }
     
-    -- Open telescope
-    require("telescope.pickers").new(opts):find()
+    -- Create and show the picker
+    local picker = require("yaml-jumper.picker").create_picker(picker_opts)
+    picker:find()
 end
 
 -- Search for YAML paths across multiple files
@@ -1611,6 +1580,24 @@ function M.setup(opts)
     -- Apply configuration
     for k, v in pairs(opts) do
         config[k] = v
+    end
+
+    -- Check for required dependencies based on picker type
+    if config.picker_type == "telescope" then
+        local has_telescope = pcall(require, "telescope.builtin")
+        if not has_telescope then
+            vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+            return
+        end
+    elseif config.picker_type == "snacks" then
+        local has_snacks = pcall(require, "snacks")
+        if not has_snacks then
+            vim.notify("Snacks.nvim is required for yaml-jumper", vim.log.levels.ERROR)
+            return
+        end
+    else
+        vim.notify("Invalid picker_type: " .. config.picker_type, vim.log.levels.ERROR)
+        return
     end
 
     -- Set max history size if provided
