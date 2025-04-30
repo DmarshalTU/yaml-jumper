@@ -50,57 +50,35 @@ function M.create_snacks_picker(opts)
     -- Create entries for snacks
     local entries = {}
     local current_file = vim.api.nvim_buf_get_name(0)
-    local seen_entries = {} -- Track seen entries using a composite key
+    local seen_paths = {} -- Track seen paths to avoid duplicates
     
     for _, item in ipairs(opts.results) do
-        local entry = opts.entry_maker(item)
-        local filename = entry.filename or current_file
-        
-        -- Create a unique key for this entry
-        local entry_key = string.format("%s:%s:%d", filename, entry.path or entry.key or "", entry.lnum or entry.line or 0)
-        
-        -- Skip if we've already seen this exact entry
-        if seen_entries[entry_key] then
+        -- Skip if we've already seen this path
+        if seen_paths[item.path] then
             goto continue
         end
-        seen_entries[entry_key] = true
+        seen_paths[item.path] = true
         
-        -- Create a proper display string
-        local display = ""
-        if entry.is_history then
-            display = "⭐ " .. (entry.path or entry.key or "Unknown")
-        else
-            display = entry.path or entry.key or "Unknown"
+        -- Create the display string
+        local display = item.path
+        if item.value then
+            display = display .. ": " .. item.value
         end
         
-        if entry.value_text then
-            display = display .. ": " .. entry.value_text
-        elseif entry.text then
-            display = display .. ": " .. entry.text
-        end
-        
-        -- Create a proper ordinal for sorting
-        local ordinal = entry.path or entry.key or display
-        
-        -- Create the entry with all required fields
+        -- Create the entry
         local snack_entry = {
-            value = entry,
+            value = item,
             display = display,
-            ordinal = ordinal,
-            filename = filename,
-            file = filename,  -- Required by Snacks for jumping
-            lnum = entry.lnum or entry.line or 1,
-            text = entry.text or display,
-            path = entry.path,
-            value_text = entry.value_text or entry.value,
-            key = entry.key,
-            is_history = entry.is_history
+            ordinal = item.path,
+            filename = current_file,
+            file = current_file,
+            lnum = item.line,
+            text = item.text,
+            path = item.path,
+            key = item.key
         }
         
-        -- Only add the entry if it has a valid display string and path
-        if display ~= "Unknown" and (snack_entry.path or snack_entry.key) then
-            table.insert(entries, snack_entry)
-        end
+        table.insert(entries, snack_entry)
         
         ::continue::
     end
@@ -148,7 +126,6 @@ function M.create_snacks_picker(opts)
                 opts.on_attach(nil, map)
             end
         end,
-        -- Add Snacks-specific options
         matcher = {
             fuzzy = true,
             smartcase = true,
