@@ -50,6 +50,8 @@ end
 function M.create_snacks_picker(opts)
     local entries = {}
     local seen_paths = {}
+    local current_buf = vim.api.nvim_get_current_buf()
+    local current_file = vim.api.nvim_buf_get_name(current_buf)
 
     -- Helper function to extract value from YAML text
     local function extract_value(text)
@@ -70,6 +72,11 @@ function M.create_snacks_picker(opts)
                 text = item.text,
                 lnum = item.line or 1,
                 col = 1,
+                buf = current_buf,
+                file = current_file,
+                filename = current_file,
+                path = item.path,
+                value_text = value,
             })
         end
     end
