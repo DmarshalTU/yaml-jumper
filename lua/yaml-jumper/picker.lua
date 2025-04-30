@@ -223,6 +223,32 @@ function M.create_snacks_picker(opts)
 
             log(string.format("Returning formatted value: %s", vim.inspect(formatted_value)))
             return formatted_value
+        end,
+        preview = function(entry)
+            if not entry or not entry.value then return end
+            local item = entry.value
+            local filename = item.filename
+            if not filename then return end
+
+            local start_line = math.max(1, item.lnum - 5)
+            local end_line = item.lnum + 5
+            local lines = vim.fn.readfile(filename, "", end_line)
+            local context = {}
+            
+            for i = start_line, math.min(end_line, #lines) do
+                if i == item.lnum then
+                    table.insert(context, "> " .. lines[i])
+                else
+                    table.insert(context, "  " .. lines[i])
+                end
+            end
+
+            return {
+                filetype = "yaml",
+                contents = context,
+                syntax = "yaml",
+                highlight_line = item.lnum - start_line + 1,
+            }
         end
     })
 
