@@ -53,34 +53,18 @@ function M.create_snacks_picker(opts)
     for _, item in ipairs(opts.results) do
         if not seen_paths[item.path] then
             seen_paths[item.path] = true
-            local display = string.format("%-40s %s", item.path, item.value or item.value_text or "")
+            local value = item.value or item.value_text or ""
+            local display = string.format("%-40s %s", item.path, value)
             table.insert(entries, {
                 value = item,
                 display = display,
-                ordinal = item.path .. " " .. (item.value or item.value_text or ""),
+                ordinal = item.path .. " " .. value,
                 buf = current_buf,
                 file = current_file,
                 lnum = item.line or 1,
                 text = display,
-                preview = function(entry, state)
-                    local bufnr = state.bufnr
-                    local lines = vim.api.nvim_buf_get_lines(current_buf, 0, -1, false)
-                    local lnum = entry.lnum
-                    local start_line = math.max(0, lnum - 5)
-                    local end_line = math.min(#lines, lnum + 5)
-                    local preview_lines = {}
-                    
-                    for i = start_line, end_line do
-                        if i == lnum - 1 then
-                            table.insert(preview_lines, "> " .. lines[i])
-                        else
-                            table.insert(preview_lines, "  " .. lines[i])
-                        end
-                    end
-                    
-                    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, preview_lines)
-                    vim.api.nvim_buf_set_option(bufnr, "filetype", "yaml")
-                end
+                label = item.path,
+                description = value
             })
         end
     end
@@ -96,6 +80,25 @@ function M.create_snacks_picker(opts)
             enabled = true,
             filetype = "yaml",
             lines = 10,
+            show = function(entry, state)
+                local bufnr = state.bufnr
+                local lines = vim.api.nvim_buf_get_lines(current_buf, 0, -1, false)
+                local lnum = entry.lnum
+                local start_line = math.max(0, lnum - 5)
+                local end_line = math.min(#lines, lnum + 5)
+                local preview_lines = {}
+                
+                for i = start_line, end_line do
+                    if i == lnum - 1 then
+                        table.insert(preview_lines, "> " .. lines[i])
+                    else
+                        table.insert(preview_lines, "  " .. lines[i])
+                    end
+                end
+                
+                vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, preview_lines)
+                vim.api.nvim_buf_set_option(bufnr, "filetype", "yaml")
+            end
         },
         on_select = function(selection)
             if selection and selection.value and selection.value.line then
