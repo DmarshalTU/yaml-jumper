@@ -79,14 +79,16 @@ function M.create_snacks_picker(opts)
             ordinal = item.path,
             filename = current_file,
             file = current_file,
-            lnum = item.line,
+            lnum = item.line or 1, -- Ensure we have a line number
             text = item.text,
             path = item.path,
             key = item.key,
             value_text = value,
             -- Add Snacks-specific fields
             label = display,
-            description = value or ""
+            description = value or "",
+            -- Add the actual value for display
+            value = value
         }
         
         table.insert(entries, snack_entry)
@@ -99,9 +101,9 @@ function M.create_snacks_picker(opts)
         prompt = opts.prompt_title,
         items = entries,
         on_select = function(selection)
-            if selection and selection.lnum then
+            if selection and selection.value and selection.value.line then
                 -- Jump to the line
-                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+                vim.api.nvim_win_set_cursor(0, {selection.value.line, 0})
                 -- Add to history if the callback exists
                 if opts.on_select then
                     opts.on_select(selection)
@@ -116,12 +118,12 @@ function M.create_snacks_picker(opts)
             
             -- Get the content around the target line
             local lines = vim.api.nvim_buf_get_lines(vim.fn.bufnr(entry.filename), 0, -1, false)
-            local start_line = math.max(0, entry.lnum - 5)
-            local end_line = math.min(#lines, entry.lnum + 5)
+            local start_line = math.max(0, (entry.value and entry.value.line or entry.lnum) - 5)
+            local end_line = math.min(#lines, (entry.value and entry.value.line or entry.lnum) + 5)
             
             local preview_lines = {}
             for i = start_line, end_line do
-                if i == entry.lnum - 1 then
+                if i == (entry.value and entry.value.line or entry.lnum) - 1 then
                     -- Highlight the current line
                     table.insert(preview_lines, "> " .. lines[i])
                 else
@@ -152,7 +154,11 @@ function M.create_snacks_picker(opts)
         },
         layout = {
             preview = "main"
-        }
+        },
+        -- Add custom display format
+        display = function(entry)
+            return entry.display
+        end
     })
     
     return picker
