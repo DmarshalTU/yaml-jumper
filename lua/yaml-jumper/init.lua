@@ -1082,7 +1082,30 @@ function M.jump_to_path()
             end
             return display
         end
-        picker_opts.preview = "preview"
+        picker_opts.preview = function(item)
+            -- Show 5 lines before and after the key
+            local lines
+            if item.file and vim.fn.filereadable(item.file) == 1 then
+                lines = vim.fn.readfile(item.file)
+            else
+                lines = vim.api.nvim_buf_get_lines(item.buf or 0, 0, -1, false)
+            end
+            local lnum = item.lnum or 1
+            local start_line = math.max(1, lnum - 5)
+            local end_line = math.min(#lines, lnum + 5)
+            local context = {}
+            for i = start_line, end_line do
+                if i == lnum then
+                    table.insert(context, "> " .. lines[i])
+                else
+                    table.insert(context, "  " .. lines[i])
+                end
+            end
+            return {
+                text = table.concat(context, "\n"),
+                ft = "yaml"
+            }
+        end
     end
 
     require("yaml-jumper.picker").create_picker(picker_opts, config):find()
