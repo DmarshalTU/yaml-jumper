@@ -45,37 +45,38 @@ end
 
 -- Create a snacks picker
 function M.create_snacks_picker(opts)
-    local snacks = require("snacks")
+    local Snacks = require("snacks")
     
-    return snacks.picker.new({
+    -- Create entries for snacks
+    local entries = {}
+    for _, item in ipairs(opts.results) do
+        local entry = opts.entry_maker(item)
+        table.insert(entries, {
+            value = entry.value,
+            display = entry.display,
+            ordinal = entry.ordinal,
+            filename = entry.filename,
+            lnum = entry.lnum,
+            text = entry.text,
+            path = entry.path,
+            value_text = entry.value_text
+        })
+    end
+    
+    -- Create the picker using Snacks.picker
+    local picker = Snacks.picker({
         prompt = opts.prompt_title,
-        finder = function()
-            local entries = {}
-            for _, item in ipairs(opts.results) do
-                local entry = opts.entry_maker(item)
-                table.insert(entries, {
-                    value = entry.value,
-                    display = entry.display,
-                    ordinal = entry.ordinal,
-                    filename = entry.filename,
-                    lnum = entry.lnum,
-                    text = entry.text,
-                    path = entry.path,
-                    value_text = entry.value_text
-                })
+        items = entries,
+        on_select = function(selection)
+            if opts.on_select then
+                opts.on_select(selection)
             end
-            return entries
         end,
-        previewer = function(entry)
+        preview = function(entry)
             if opts.previewer then
                 local preview_bufnr = vim.api.nvim_create_buf(false, true)
                 opts.previewer.define_preview({ state = { bufnr = preview_bufnr } }, entry, {})
                 return preview_bufnr
-            end
-        end,
-        on_select = function(selection)
-            if opts.on_select then
-                opts.on_select(selection)
             end
         end,
         attach_mappings = function(map)
@@ -84,6 +85,8 @@ function M.create_snacks_picker(opts)
             end
         end
     })
+    
+    return picker
 end
 
 return M 
