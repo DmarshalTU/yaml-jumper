@@ -165,13 +165,18 @@ function M.create_snacks_picker(opts)
                 vim.cmd("edit " .. item.filename)
             end
 
-            -- Jump to the beginning of the line
-            if item.lnum then
-                log(string.format("Jumping to line %d", item.lnum))
-                vim.api.nvim_win_set_cursor(0, {item.lnum, 0})
-            else
+            -- Get the line number, trying both line and lnum fields
+            local line_number = item.line or item.lnum
+            if not line_number then
                 log("No line number found in item")
+                return
             end
+
+            -- Debug log the line number
+            log(string.format("Jumping to line %d", line_number))
+            
+            -- Jump to the beginning of the line
+            vim.api.nvim_win_set_cursor(0, {line_number, 0})
             
             -- Add to history if on_select callback exists
             if opts.on_select then
@@ -250,6 +255,18 @@ function M.create_snacks_picker(opts)
                 log(string.format("Returning value: %s", vim.inspect(result)))
                 return result
             end
+            
+            -- If no value found, try to get the value from the text directly
+            local _, val = item.text:match("^%s*[^:]+:%s*(.+)$")
+            if val then
+                val = val:gsub("^%s*(.-)%s*$", "%1")
+                if val ~= "" then
+                    local result = { item.path .. " = " .. val }
+                    log(string.format("Returning direct value: %s", vim.inspect(result)))
+                    return result
+                end
+            end
+            
             log("No value found, returning empty table")
             return {}
         end
