@@ -55,20 +55,25 @@ function M.create_snacks_picker(opts)
         local bufnr = vim.fn.bufnr(filename)
         
         -- Create a proper display string
-        local display = entry.path
+        local display = entry.path or entry.key or "Unknown"
         if entry.value_text then
             display = display .. ": " .. entry.value_text
+        elseif entry.text then
+            display = display .. ": " .. entry.text
         end
         
+        -- Create a proper ordinal for sorting
+        local ordinal = entry.path or entry.key or display
+        
         table.insert(entries, {
-            value = entry.value,
+            value = entry.value or item,
             display = display,
-            ordinal = entry.ordinal,
+            ordinal = ordinal,
             filename = filename,
             bufnr = bufnr,
             file = filename,
-            lnum = entry.lnum,
-            text = entry.text,
+            lnum = entry.lnum or 1,
+            text = entry.text or display,
             path = entry.path,
             value_text = entry.value_text
         })
