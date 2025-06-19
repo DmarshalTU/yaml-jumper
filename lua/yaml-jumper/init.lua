@@ -1648,12 +1648,12 @@ function M.setup(opts)
     
     -- Set up key mappings if they exist
     local mappings = {
-        {"path_keymap", "yp", function() M.jump_to_path() end},
-        {"key_keymap", "yk", function() M.jump_to_key() end},
-        {"value_keymap", "yv", function() M.jump_to_value() end},
-        {"project_path_keymap", "yJ", function() M.search_paths_in_project() end},
-        {"project_value_keymap", "yV", function() M.search_values_in_project() end},
-        {"history_keymap", "yh", function() M.jump_to_history() end}
+        {"path_keymap", "yp", function() M.jump_to_path() end, "Jump to YAML path"},
+        {"key_keymap", "yk", function() M.jump_to_key() end, "Jump to YAML key"},
+        {"value_keymap", "yv", function() M.jump_to_value() end, "Jump to YAML value"},
+        {"project_path_keymap", "yJ", function() M.search_paths_in_project() end, "Search YAML paths in project"},
+        {"project_value_keymap", "yV", function() M.search_values_in_project() end, "Search YAML values in project"},
+        {"history_keymap", "yh", function() M.jump_to_history() end, "Jump to YAML history"}
     }
     
     -- Register mappings
@@ -1661,6 +1661,7 @@ function M.setup(opts)
         local key = mapping[1]
         local default = mapping[2]
         local fn = mapping[3]
+        local desc = mapping[4]
         
         local keymap = nil
         if opts[key] == nil then
@@ -1672,7 +1673,7 @@ function M.setup(opts)
         end
         
         if keymap then
-            vim.keymap.set("n", keymap, fn, {noremap = true, silent = true})
+            vim.keymap.set("n", keymap, fn, {noremap = true, silent = true, desc = desc})
         end
     end
     
