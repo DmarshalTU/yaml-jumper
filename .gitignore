@@ -3,6 +3,9 @@ luac.out
 docs
 log
 combined.*
+*.log
+.DS_Store
+
 # luarocks build files
 *.src.rock
 *.zip
