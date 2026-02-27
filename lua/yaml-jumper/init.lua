@@ -30,7 +30,7 @@ local config = {
     max_history_items = 20, -- Max number of items to keep in history
     use_smart_parser = true, -- Use the smart YAML parser when available
     debug_performance = false, -- Enable performance logging
-    picker_type = "telescope", -- or "snacks"
+    picker_type = "telescope", -- "telescope", "fzf-lua", or "snacks"
     picker_config = {
         snacks = {
             prompt = "YAML Jump: ",
@@ -1615,6 +1615,12 @@ function M.setup(opts)
         local has_telescope = pcall(require, "telescope.builtin")
         if not has_telescope then
             vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
+            return
+        end
+    elseif config.picker_type == "fzf-lua" then
+        local has_fzf = pcall(require, "fzf-lua")
+        if not has_fzf then
+            vim.notify("fzf-lua is required for yaml-jumper", vim.log.levels.ERROR)
             return
         end
     elseif config.picker_type == "snacks" then

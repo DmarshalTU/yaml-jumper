@@ -17,6 +17,8 @@ end
 function M.create_picker(opts, config)
     if config.picker_type == "snacks" then
         return M.create_snacks_picker(opts, config)
+    elseif config.picker_type == "fzf-lua" then
+        return M.create_fzf_picker(opts, config)
     else
         return M.create_telescope_picker(opts, config)
     end
@@ -54,6 +56,40 @@ function M.create_telescope_picker(opts)
             return true
         end
     })
+end
+
+-- Create an fzf-lua picker (returns object with :find() to match telescope interface)
+function M.create_fzf_picker(opts, config)
+    return {
+        find = function()
+            local fzf = require("fzf-lua")
+            local entries = {}
+            local entry_map = {}
+
+            for _, item in ipairs(opts.results) do
+                local entry = opts.entry_maker(item)
+                local display = entry.display or ""
+                table.insert(entries, display)
+                entry_map[display] = entry
+            end
+
+            fzf.fzf_exec(entries, {
+                prompt = (opts.prompt_title or "YAML") .. "> ",
+                previewer = false,
+                fzf_opts = { ["--layout"] = "reverse" },
+                actions = {
+                    ["default"] = function(selected)
+                        if not selected or #selected == 0 then return end
+                        local picked = selected[1]
+                        local entry = entry_map[picked]
+                        if entry and opts.on_select then
+                            opts.on_select(entry)
+                        end
+                    end,
+                },
+            })
+        end,
+    }
 end
 
 -- Create a snacks picker
