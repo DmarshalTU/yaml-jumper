@@ -162,15 +162,8 @@ function smart_parser.parse_content(content)
         if ok and parsed then
             return parsed
         else
-            -- Log parsing error but don't show to user to avoid disruption
             vim.schedule(function()
-                vim.diagnostic.show(vim.diagnostic.severity.HINT, 0, {
-                    {
-                        lnum = 0,
-                        col = 0,
-                        message = "YAML parser: " .. (parsed or "unknown error")
-                    }
-                }, {})
+                vim.notify("YAML parser: " .. tostring(parsed or "unknown error"), vim.log.levels.DEBUG)
             end)
         end
     end
@@ -762,38 +755,18 @@ function M.get_yaml_values(lines, file_path)
     return values
 end
 
--- Find YAML files in the project
+-- Find YAML files in the project (uses built-in vim.fs, no external deps)
 function M.find_yaml_files()
-    -- Check if plenary is available for file searching
-    local has_plenary, plenary_scan = pcall(require, "plenary.scandir")
-    if not has_plenary then
-        vim.notify("Plenary.nvim is required for multi-file search", vim.log.levels.ERROR)
-        return {}
-    end
-    
-    -- Get the project root
     local cwd = vim.fn.getcwd()
-    
-    -- Scan for YAML files
-    local files
-    local ok, result = pcall(function()
-        return plenary_scan.scan_dir(cwd, {
-            hidden = false,
-            depth = config.depth_limit,
-            search_pattern = function(entry)
-                return entry:match("%.ya?ml$")
-            end
-        })
-    end)
-    
-    if ok then
-        files = result
-    else
-        vim.notify("Error scanning for YAML files: " .. (result or "unknown error"), vim.log.levels.ERROR)
-        files = {}
-    end
-    
-    return files
+    local files = vim.fs.find(function(name)
+        return name:match("%.ya?ml$") ~= nil
+    end, {
+        path = cwd,
+        upward = false,
+        limit = math.huge,
+        type = "file",
+    })
+    return files or {}
 end
 
 -- Edit a YAML value in-place
@@ -1240,14 +1213,16 @@ function M.search_values_in_project()
         prompt_title = "YAML Values in Project",
         results = all_values,
         entry_maker = function(entry)
+            local val = entry.value or ""
+            local path = entry.path or ""
             return {
                 value = entry,
-                display = entry.relative_path .. ": " .. entry.path .. " = " .. entry.value,
-                ordinal = entry.file_name .. " " .. entry.path .. " " .. entry.value,
+                display = (entry.relative_path or "") .. ": " .. path .. " = " .. val,
+                ordinal = (entry.file_name or "") .. " " .. path .. " " .. val,
                 filename = entry.file_path,
                 lnum = entry.line,
                 text = entry.text,
-                value_text = entry.value,
+                value_text = val,
             }
         end,
         on_select = function(selection)
@@ -1375,27 +1350,10 @@ function M.setup(opts)
         config[k] = v
     end
 
-    -- Check for required dependencies based on picker type
-    if config.picker_type == "telescope" then
-        local has_telescope = pcall(require, "telescope.builtin")
-        if not has_telescope then
-            vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-            return
-        end
-    elseif config.picker_type == "fzf-lua" then
-        local has_fzf = pcall(require, "fzf-lua")
-        if not has_fzf then
-            vim.notify("fzf-lua is required for yaml-jumper", vim.log.levels.ERROR)
-            return
-        end
-    elseif config.picker_type == "snacks" then
-        local has_snacks = pcall(require, "snacks")
-        if not has_snacks then
-            vim.notify("Snacks.nvim is required for yaml-jumper", vim.log.levels.ERROR)
-            return
-        end
-    else
-        vim.notify("Invalid picker_type: " .. config.picker_type, vim.log.levels.ERROR)
+    -- Validate picker_type value (actual dependency check deferred to first use)
+    local valid_pickers = { telescope = true, ["fzf-lua"] = true, snacks = true }
+    if not valid_pickers[config.picker_type] then
+        vim.notify("Invalid picker_type: " .. tostring(config.picker_type), vim.log.levels.ERROR)
         return
     end
 
