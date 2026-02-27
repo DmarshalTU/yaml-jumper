@@ -878,7 +878,7 @@ function M.edit_yaml_value(file_path, line_num, current_value)
                 vim.api.nvim_buf_set_lines(bufnr, line_num - 1, line_num, false, {new_line})
                 
                 -- Write the changes if needed
-                if not vim.api.nvim_buf_get_option(bufnr, "modified") then
+                if not vim.bo[bufnr].modified then
                     vim.api.nvim_buf_call(bufnr, function()
                         vim.cmd("write")
                     end)
@@ -898,36 +898,29 @@ function M.edit_yaml_value(file_path, line_num, current_value)
     return false
 end
 
--- Add edit action to the value search
+-- Add edit action to the value search (telescope-only, no-op for other pickers)
 function M.add_edit_action(prompt_bufnr, map)
+    if config.picker_type ~= "telescope" then
+        return true
+    end
     local actions = require("telescope.actions")
     local action_state = require("telescope.actions.state")
     
-    -- Add 'e' mapping to edit the value
     map("i", "<C-e>", function()
         local selection = action_state.get_selected_entry()
         if selection then
             actions.close(prompt_bufnr)
-            
-            -- Edit the value
             local file_path = selection.filename
             local line_num = selection.lnum
             local current_value = selection.value_text or ""
-            
-            -- Open the file if needed
             if file_path and file_path ~= vim.fn.expand("%:p") then
                 pcall(vim.cmd, "edit " .. vim.fn.fnameescape(file_path))
             end
-            
-            -- Move cursor to the selected line
             pcall(vim.api.nvim_win_set_cursor, 0, {line_num, 0})
-            
-            -- Edit the value
             M.edit_yaml_value(file_path, line_num, current_value)
         end
     end)
     
-    -- Return true to keep the default mappings
     return true
 end
 
@@ -994,7 +987,7 @@ function utils.get_history(history_type)
     return cache.history[history_type] or {}
 end
 
--- Jump to a YAML path using telescope
+-- Jump to a YAML path
 function M.jump_to_path()
     local lines = utils.get_file_lines()
     local paths = M.get_yaml_paths(lines)
@@ -1083,97 +1076,32 @@ function M.jump_to_path()
     require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
--- Jump to a key prefix using telescope
+-- Jump to a key prefix
 function M.jump_to_key()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-        return
-    end
-    
-    -- Get lines of current buffer
-    local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
-    
-    -- Get all keys
     local matches = M.find_keys_with_prefix("", lines)
-    
-    -- Preview function that shows the YAML value at the selected key
-    local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "YAML Value Preview",
-        define_preview = function(self, entry, status)
-            local content = {}
-            local lnum = entry.lnum
-            
-            -- Add selected line
-            table.insert(content, lines[lnum])
-            
-            -- Try to capture the value and any nested content
-            local indent_level = lines[lnum]:match("^(%s*)"):len()
-            local max_lines = config.max_preview_lines
-            local line_count = 0
-            
-            -- Add lines with deeper indentation (the value and any nested content)
-            for i = lnum + 1, #lines do
-                if line_count >= max_lines then
-                    table.insert(content, "... (more lines not shown)")
-                    break
-                end
-                
-                local line = lines[i]
-                local line_indent = line:match("^(%s*)"):len()
-                
-                -- Stop when we reach a line with same or less indentation
-                if line_indent <= indent_level then
-                    break
-                end
-                
-                table.insert(content, line)
-                line_count = line_count + 1
-            end
-            
-            -- Add the content to the preview buffer
-            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
-            
-            -- Syntax highlighting for YAML
-            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
-        end
-    })
-    
-    -- Create finder options
-    local opts = {
+
+    local picker_opts = {
         prompt_title = "YAML Key",
-        finder = require("telescope.finders").new_table {
-            results = matches,
-            entry_maker = function(entry)
-                return {
-                    value = entry,
-                    display = entry.key,
-                    ordinal = entry.key,
-                    lnum = entry.line,
-                    text = entry.text
-                }
-            end
-        },
-        sorter = require("telescope.config").values.generic_sorter({}),
-        previewer = previewer,
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
-            end)
-            return true
-        end
+        results = matches,
+        entry_maker = function(entry)
+            return {
+                value = entry,
+                display = entry.key,
+                ordinal = entry.key,
+                lnum = entry.line,
+                text = entry.text,
+            }
+        end,
+        on_select = function(selection)
+            pcall(vim.api.nvim_win_set_cursor, 0, { selection.lnum, 0 })
+        end,
     }
-    
-    -- Open telescope
-    require("telescope.pickers").new(opts):find()
+
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
--- Jump to a YAML value using telescope
+-- Jump to a YAML value
 function M.jump_to_value()
     local bufnr = vim.api.nvim_get_current_buf()
     local lines = utils.get_file_lines()
@@ -1232,39 +1160,22 @@ end
 
 -- Search for YAML paths across multiple files
 function M.search_paths_in_project()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-        return
-    end
-    
-    -- Find YAML files in the project
     local files = M.find_yaml_files()
     if #files == 0 then
         vim.notify("No YAML files found in the project", vim.log.levels.WARN)
         return
     end
-    
-    -- Build a list of all paths with their files
+
     local all_paths = {}
-    
-    -- Process each file
     for _, file_path in ipairs(files) do
         local file_content = {}
-        
-        -- Read the file content
         local file = io.open(file_path, "r")
         if file then
             for line in file:lines() do
                 table.insert(file_content, line)
             end
             file:close()
-            
-            -- Extract paths from the file
             local paths = M.get_yaml_paths(file_content)
-            
-            -- Add file information to each path
             for _, path in ipairs(paths) do
                 path.file_path = file_path
                 path.file_name = vim.fn.fnamemodify(file_path, ":t")
@@ -1273,52 +1184,7 @@ function M.search_paths_in_project()
             end
         end
     end
-    
-    -- Preview function for multi-file paths
-    local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "YAML Preview",
-        define_preview = function(self, entry, status)
-            -- Read the file for preview
-            local content = {}
-            local file = io.open(entry.filename, "r")
-            if file then
-                local line_num = 1
-                local target_line = entry.lnum
-                local content_lines = {}
-                
-                -- Read all lines
-                for line in file:lines() do
-                    content_lines[line_num] = line
-                    line_num = line_num + 1
-                end
-                file:close()
-                
-                -- Add some context before and after the target line
-                local start_line = math.max(1, target_line - 5)
-                local end_line = math.min(#content_lines, target_line + 10)
-                
-                -- Add context to preview
-                for i = start_line, end_line do
-                    if i == target_line then
-                        -- Highlight the current line
-                        table.insert(content, "> " .. content_lines[i])
-                    else
-                        table.insert(content, "  " .. content_lines[i])
-                    end
-                end
-            else
-                table.insert(content, "Error: Could not read file")
-            end
-            
-            -- Add the content to the preview buffer
-            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
-            
-            -- Apply syntax highlighting
-            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
-        end
-    })
-    
-    -- Create finder options
+
     local picker_opts = {
         prompt_title = "YAML Paths in Project",
         results = all_paths,
@@ -1329,62 +1195,38 @@ function M.search_paths_in_project()
                 ordinal = entry.file_name .. " " .. entry.path,
                 filename = entry.file_path,
                 lnum = entry.line,
-                text = entry.text
+                text = entry.text,
             }
         end,
-        sorter = require("telescope.config").values.generic_sorter({}),
-        previewer = previewer,
         on_select = function(selection)
             if vim.fn.expand("%:p") ~= selection.filename then
                 vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
             end
-            vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            pcall(vim.api.nvim_win_set_cursor, 0, { selection.lnum, 0 })
         end,
-        on_attach = function(prompt_bufnr, map)
-            -- Add edit action if you want
-        end
     }
-    
-    -- Open telescope
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
-    picker:find()
+
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
 -- Search for YAML values across multiple files
 function M.search_values_in_project()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper", vim.log.levels.ERROR)
-        return
-    end
-    
-    -- Find YAML files in the project
     local files = M.find_yaml_files()
     if #files == 0 then
         vim.notify("No YAML files found in the project", vim.log.levels.WARN)
         return
     end
-    
-    -- Build a list of all values with their files
+
     local all_values = {}
-    
-    -- Process each file
     for _, file_path in ipairs(files) do
         local file_content = {}
-        
-        -- Read the file content
         local file = io.open(file_path, "r")
         if file then
             for line in file:lines() do
                 table.insert(file_content, line)
             end
             file:close()
-            
-            -- Extract values from the file
             local values = M.get_yaml_values(file_content)
-            
-            -- Add file information to each value
             for _, value in ipairs(values) do
                 value.file_path = file_path
                 value.file_name = vim.fn.fnamemodify(file_path, ":t")
@@ -1393,52 +1235,7 @@ function M.search_values_in_project()
             end
         end
     end
-    
-    -- Preview function for multi-file values
-    local previewer = require("telescope.previewers").new_buffer_previewer({
-        title = "YAML Value Preview",
-        define_preview = function(self, entry, status)
-            -- Read the file for preview
-            local content = {}
-            local file = io.open(entry.filename, "r")
-            if file then
-                local line_num = 1
-                local target_line = entry.lnum
-                local content_lines = {}
-                
-                -- Read all lines
-                for line in file:lines() do
-                    content_lines[line_num] = line
-                    line_num = line_num + 1
-                end
-                file:close()
-                
-                -- Add some context before and after the target line
-                local start_line = math.max(1, target_line - 5)
-                local end_line = math.min(#content_lines, target_line + 10)
-                
-                -- Add context to preview
-                for i = start_line, end_line do
-                    if i == target_line then
-                        -- Highlight the current line
-                        table.insert(content, "> " .. content_lines[i])
-                    else
-                        table.insert(content, "  " .. content_lines[i])
-                    end
-                end
-            else
-                table.insert(content, "Error: Could not read file")
-            end
-            
-            -- Add the content to the preview buffer
-            vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, content)
-            
-            -- Apply syntax highlighting
-            vim.api.nvim_buf_set_option(self.state.bufnr, "filetype", "yaml")
-        end
-    })
-    
-    -- Create finder options
+
     local picker_opts = {
         prompt_title = "YAML Values in Project",
         results = all_values,
@@ -1450,39 +1247,22 @@ function M.search_values_in_project()
                 filename = entry.file_path,
                 lnum = entry.line,
                 text = entry.text,
-                value_text = entry.value
+                value_text = entry.value,
             }
         end,
-        sorter = require("telescope.config").values.generic_sorter({}),
-        previewer = previewer,
         on_select = function(selection)
             if vim.fn.expand("%:p") ~= selection.filename then
                 vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
             end
-            vim.api.nvim_win_set_cursor(0, {selection.lnum, 0})
+            pcall(vim.api.nvim_win_set_cursor, 0, { selection.lnum, 0 })
         end,
-        on_attach = function(prompt_bufnr, map)
-            -- Add edit action
-            M.add_edit_action(prompt_bufnr, map)
-            
-            return true
-        end
     }
-    
-    -- Open telescope
-    local picker = require("yaml-jumper.picker").create_picker(picker_opts, config)
-    picker:find()
+
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
 -- Jump to history of recent YAML paths
 function M.jump_to_history()
-    -- Check if telescope is available
-    local has_telescope, telescope = pcall(require, "telescope.builtin")
-    if not has_telescope then
-        vim.notify("Telescope is required for yaml-jumper history", vim.log.levels.ERROR)
-        return
-    end
-    
     if #history == 0 then
         vim.notify("No YAML jump history available", vim.log.levels.INFO)
         return
@@ -1491,56 +1271,41 @@ function M.jump_to_history()
     local items = {}
     for i = #history, 1, -1 do
         local entry = history[i]
-        local display = ""
         local time_str = os.date("%H:%M:%S", entry.timestamp)
-        
+        local display = ""
         if entry.type == "paths" then
             display = "[" .. time_str .. "] Path: " .. entry.value
         elseif entry.type == "values" then
             display = "[" .. time_str .. "] Value: " .. entry.value
         end
-        
         table.insert(items, {
             display = display,
             entry = entry,
-            index = i
+            index = i,
         })
     end
-    
-    -- Create finder options
-    local opts = {
+
+    local picker_opts = {
         prompt_title = "YAML Jump History",
-        finder = require("telescope.finders").new_table {
-            results = items,
-            entry_maker = function(item)
-                return {
-                    value = item,
-                    display = item.display,
-                    ordinal = item.display
-                }
+        results = items,
+        entry_maker = function(item)
+            return {
+                value = item,
+                display = item.display,
+                ordinal = item.display,
+            }
+        end,
+        on_select = function(selection)
+            local sel_entry = selection.value.entry
+            if sel_entry.type == "paths" then
+                M.jump_to_specific_path(sel_entry.value)
+            elseif sel_entry.type == "values" then
+                M.jump_to_specific_value(sel_entry.value)
             end
-        },
-        sorter = require("telescope.config").values.generic_sorter({}),
-        attach_mappings = function(prompt_bufnr, map)
-            local actions = require("telescope.actions")
-            actions.select_default:replace(function()
-                actions.close(prompt_bufnr)
-                local selection = require("telescope.actions.state").get_selected_entry()
-                
-                -- Jump to appropriate place based on type
-                if selection.value.entry.type == "paths" then
-                    M.jump_to_specific_path(selection.value.entry.value)
-                elseif selection.value.entry.type == "values" then
-                    M.jump_to_specific_value(selection.value.entry.value)
-                end
-            end)
-            
-            return true
-        end
+        end,
     }
-    
-    -- Open telescope
-    require("telescope.pickers").new(opts):find()
+
+    require("yaml-jumper.picker").create_picker(picker_opts, config):find()
 end
 
 -- Helper function to jump to a specific path
